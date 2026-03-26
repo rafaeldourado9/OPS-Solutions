@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/unit/test_create_premise.py tests/unit/test_create_quote.py -v)",
+      "Bash(python -m pytest tests/unit/ -v)",
+      "Bash(python -m pytest tests/unit/test_agent_config.py tests/unit/test_rag_documents.py -v)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//d/CRM/frontend/**)",
+      "Bash(npm install:*)",
+      "mcp__MCP_DOCKER__browser_take_screenshot",
+      "mcp__MCP_DOCKER__browser_navigate",
+      "mcp__MCP_DOCKER__browser_evaluate",
+      "Bash(find . -name \"*.tsx\" -exec wc -l {} +)",
+      "Bash(npx tsc:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(find /d/CRM -type f -name docker*)"
+    ]
+  }
+}
