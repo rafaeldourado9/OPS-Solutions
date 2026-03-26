@@ -1,0 +1,60 @@
+version: "3.9"
+
+# Joins the existing agent-network created by D:\CRM\agents\docker-compose.yml
+# Start order: agents → crm → infra
+#   cd D:\CRM\agents  && docker compose up -d
+#   cd D:\CRM\crm     && docker compose up -d
+#   cd D:\CRM\infra   && docker compose up -d
+
+networks:
+  agent-network:
+    name: agents_default
+    external: false   # cria se não existir; reutiliza se agents/crm já estiverem no ar
+
+services:
+  nginx-proxy:
+    image: nginx:1.27-alpine
+    container_name: ops-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx-logs:/var/log/nginx
+    networks:
+      - agent-network
+    depends_on:
+      - crm-api-check
+      - crm-frontend-check
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Lightweight health-gate: espera os serviços upstream estarem no ar ─────
+  crm-api-check:
+    image: curlimages/curl:latest
+    container_name: ops-api-check
+    networks:
+      - agent-network
+    entrypoint: >
+      sh -c "until curl -sf http://crm-api:8001/health; do
+               echo 'waiting for crm-api...'; sleep 3;
+             done; echo 'crm-api ready'"
+    restart: "no"
+
+  crm-frontend-check:
+    image: curlimages/curl:latest
+    container_name: ops-frontend-check
+    networks:
+      - agent-network
+    entrypoint: >
+      sh -c "until curl -sf http://crm-frontend:80; do
+               echo 'waiting for crm-frontend...'; sleep 3;
+             done; echo 'crm-frontend ready'"
+    restart: "no"
+
+volumes:
+  nginx-logs:
