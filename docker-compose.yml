@@ -1,0 +1,303 @@
+networks:
+  default:
+    name: ops-network
+    driver: bridge
+
+volumes:
+  # Agents
+  redis-data:
+  qdrant-data:
+  agents-postgres-data:
+  ollama-data:
+  gateway-auth:
+  # CRM
+  crm-postgres-data:
+  minio-data:
+  rabbitmq-data:
+  # Infra
+  nginx-logs:
+
+# =============================================================================
+#  AGENTS
+# =============================================================================
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --notify-keyspace-events KEA
+      --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  agents-postgres:
+    image: postgres:16-alpine
+    container_name: agents-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: whatsapp_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - agents-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  gateway:
+    build: ./agents/gateway
+    container_name: gateway
+    restart: unless-stopped
+    environment:
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://agent:8000/webhook}
+      PORT: "3000"
+      SESSION_NAME: ${SESSION_NAME:-default}
+      API_KEY: ${WAHA_API_KEY:-adminops}
+      AUTH_DIR: /app/auth
+      LOG_LEVEL: info
+    ports:
+      - "3000:3000"
+    volumes:
+      - gateway-auth:/app/auth
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+      - ./agents/scripts/download_models.sh:/download_models.sh:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        OLLAMA_PID=$$!
+        echo "Aguardando Ollama iniciar..."
+        sleep 10
+        echo "Baixando modelos..."
+        ollama pull llama3.1:8b || true
+        ollama pull nomic-embed-text || true
+        echo "Modelos baixados!"
+        wait $$OLLAMA_PID
+
+  agent:
+    build: ./agents
+    container_name: agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - AGENT_IDS=${AGENT_IDS:-ops_solutions,maya,snowden}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@agents-postgres:5432/whatsapp_agent
+      - WAHA_URL=http://gateway:3000
+      - WAHA_API_KEY=${WAHA_API_KEY:-adminops}
+      - OLLAMA_URL=http://ollama:11434
+      - LOG_LEVEL=INFO
+      - LOG_JSON=false
+    volumes:
+      - ./agents/agents:/app/agents
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      agents-postgres:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================================================
+  #  CRM
+  # ===========================================================================
+
+  crm-postgres:
+    image: postgres:16-alpine
+    container_name: crm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crm
+    ports:
+      - "5433:5432"
+    volumes:
+      - crm-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  crm-api:
+    build: ./crm
+    container_name: crm-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - CRM_DATABASE_URL=postgresql+asyncpg://postgres:postgres@crm-postgres:5432/crm
+      - REDIS_URL=redis://redis:6379/1
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - AGENTS_API_URL=http://agent:8000
+      - AGENTS_DIR=/app/shared-agents
+      - GATEWAY_URL=http://gateway:3000
+      - GATEWAY_API_KEY=${GATEWAY_API_KEY:-}
+      - MINIO_URL=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - QDRANT_URL=http://qdrant:6333
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - SMTP_HOST=${SMTP_HOST:-smtp-relay.brevo.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - EMAIL_FROM=${EMAIL_FROM:-OPS Solutions <suporte@ops.solutions.com>}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./agents/agents:/app/shared-agents:rw
+    depends_on:
+      crm-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  # ===========================================================================
+  #  FRONTEND + NGINX PROXY
+  # ===========================================================================
+
+  crm-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    container_name: crm-frontend
+    restart: unless-stopped
+    depends_on:
+      crm-api:
+        condition: service_started
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      crm-api:
+        condition: service_started
+      crm-frontend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
