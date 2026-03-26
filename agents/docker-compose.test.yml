@@ -1,0 +1,70 @@
+version: "3.9"
+
+networks:
+  agent-test-network:
+    driver: bridge
+
+services:
+  redis-test:
+    image: redis:7-alpine
+    container_name: whatsapp-agent-redis-test
+    command: >
+      redis-server
+      --notify-keyspace-events KEA
+    ports:
+      - "6380:6379"
+    networks:
+      - agent-test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  qdrant-test:
+    image: qdrant/qdrant:latest
+    container_name: whatsapp-agent-qdrant-test
+    ports:
+      - "6433:6333"
+      - "6434:6334"
+    networks:
+      - agent-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: whatsapp-agent-postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: whatsapp_agent_test
+    ports:
+      - "5433:5432"
+    networks:
+      - agent-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_agent_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  ollama-test:
+    image: ollama/ollama:latest
+    container_name: whatsapp-agent-ollama-test
+    ports:
+      - "11535:11434"
+    networks:
+      - agent-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
