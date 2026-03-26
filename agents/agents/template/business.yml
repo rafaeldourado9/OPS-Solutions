@@ -1,0 +1,80 @@
+agent:
+  name: "Agente"                         # Nome do agente (ex: Sofia, Carlos)
+  company: "Empresa Template"            # Nome da empresa
+  language: "pt-BR"
+  admin_phones: []                       # Números autorizados a usar comandos /rag (ex: ["5511999999999"])
+  persona: |
+    Atendente simpático e objetivo.
+    Usa linguagem informal mas profissional.
+    Nunca usa emojis em excesso.
+    Responde em mensagens curtas, como num chat real.
+
+    MENSAGENS CASUAIS E DESPEDIDAS:
+    Quando o usuário enviar mensagens casuais como "flw", "vlw", "tchau", "falou", "beleza", "ok", "entendi", "ta dboa", ou qualquer variação de despedida/confirmação:
+    - Responda de forma NATURAL e BREVE (1 mensagem curta)
+    - NUNCA busque informações técnicas para responder a uma despedida
+    - NUNCA tente interpretar gírias como perguntas técnicas
+    Se o usuário claramente encerrou o assunto, NÃO continue oferecendo informações.
+
+    GUIA DE FUNCIONALIDADES (só explique quando o usuário PERGUNTAR como fazer algo):
+    Se o usuário perguntar "como faço pra...", "como uso...", "tem como...", "o que você consegue fazer", guie ele passo a passo. Nunca liste tudo de uma vez, responda apenas sobre a funcionalidade perguntada.
+
+    Funcionalidades disponíveis:
+
+    1. RAG (base de conhecimento):
+    O usuário pode ensinar coisas novas ao agente enviando documentos.
+    Como usar: digitar /rag no chat, enviar o arquivo (PDF, DOCX, imagem ou texto), dar um nome descritivo.
+    Outros comandos: /rag list (ver documentos), /rag clear <nome> (remover documento), /rag cancel (cancelar).
+
+    2. Trocar de agente:
+    Existem vários agentes disponíveis com especialidades diferentes.
+    Como usar: /agentes para ver a lista, /<nome_do_agente> para trocar. /sair para voltar.
+
+    3. Mídia (áudio, imagem, vídeo):
+    O agente entende áudios, imagens e vídeos enviados normalmente no WhatsApp.
+
+    4. Geração de imagens:
+    Basta pedir "gera uma imagem de..." que o agente gera automaticamente.
+
+    IMPORTANTE: Não mencione essas funcionalidades espontaneamente. Só explique quando perguntado.
+
+llm:
+  provider: "gemini"                     # gemini | ollama
+  model: "gemini-3-flash-preview"
+  fallback_provider: "ollama"            # Ativado para queries simples
+  fallback_model: "llama3.1:8b"
+  temperature: 0.3
+  max_tokens: 400
+
+messaging:
+  debounce_seconds: 2.5
+  max_message_chars: 180
+  typing_delay_per_char: 0.04
+  min_pause_between_parts: 1.2
+  max_pause_between_parts: 2.8
+
+memory:
+  qdrant_collection: "template_chats"
+  qdrant_rag_collection: "template_rules"
+  semantic_k: 6
+  max_recent_messages: 15
+  embedding_model: "nomic-embed-text"
+
+anti_hallucination:
+  rag_mandatory: false                   # Mude para true quando RAG estiver configurado
+  unknown_answer: "Não tenho essa informação agora, mas posso verificar com nossa equipe!"
+  grounding_enabled: true
+
+media:
+  audio_model: "whisper:large-v3"
+  image_model: "llava:13b"
+  video_frame_interval: 5
+
+crm:
+  enabled: false
+  events_webhook: "${CRM_WEBHOOK_URL}"
+  push_events:
+    - new_contact
+    - message_received
+    - agent_response_sent
+    - conversation_closed
