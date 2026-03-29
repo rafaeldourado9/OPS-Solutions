@@ -6,18 +6,18 @@ import {
 } from '@phosphor-icons/react'
 import { useAuthStore } from '../../store/authStore'
 
-const NAV = [
-  { to: '/app/dashboard', icon: SquaresFour, label: 'Dashboard' },
-  { to: '/app/customers', icon: Users, label: 'Clientes' },
-  { to: '/app/leads', icon: Kanban, label: 'Leads' },
-  { to: '/app/conversations', icon: ChatCircleDots, label: 'Conversas' },
-  { to: '/app/quotes', icon: FileText, label: 'Orçamentos' },
-  { to: '/app/premises', icon: Scales, label: 'Premissas' },
-  { to: '/app/contracts', icon: Handshake, label: 'Contratos' },
-  { to: '/app/inventory', icon: Package, label: 'Estoque' },
-  { to: '/app/templates', icon: FileDoc, label: 'Templates' },
-  { to: '/app/agents', icon: Robot, label: 'Agente IA' },
-  { to: '/app/settings', icon: Gear, label: 'Configurações' },
+const ALL_NAV: { to: string; icon: React.ElementType; label: string }[] = [
+  { to: '/app/dashboard',     icon: SquaresFour,   label: 'Dashboard'      },
+  { to: '/app/customers',     icon: Users,         label: 'Clientes'        },
+  { to: '/app/leads',         icon: Kanban,        label: 'Leads'           },
+  { to: '/app/conversations', icon: ChatCircleDots,label: 'Conversas'       },
+  { to: '/app/quotes',        icon: FileText,      label: 'Orçamentos'      },
+  { to: '/app/premises',      icon: Scales,        label: 'Premissas'       },
+  { to: '/app/contracts',     icon: Handshake,     label: 'Contratos'       },
+  { to: '/app/inventory',     icon: Package,       label: 'Estoque'         },
+  { to: '/app/templates',     icon: FileDoc,       label: 'Templates'       },
+  { to: '/app/agents',        icon: Robot,         label: 'Agente IA'       },
+  { to: '/app/settings',      icon: Gear,          label: 'Configurações'   },
 ]
 
 interface SidebarProps {
@@ -28,6 +28,8 @@ interface SidebarProps {
 export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const logout = useAuthStore(s => s.logout)
   const tenant = useAuthStore(s => s.tenant)
+
+  const nav = ALL_NAV
 
   return (
     <aside
@@ -55,7 +57,6 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             <p className="text-[11px] text-zinc-400 truncate leading-tight mt-0.5">{tenant?.name ?? 'Carregando...'}</p>
           </div>
         </div>
-        {/* Close button — mobile only */}
         <button
           onClick={onClose}
           className="lg:hidden flex items-center justify-center w-8 h-8 rounded-xl text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-all ml-2 shrink-0"
@@ -66,7 +67,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {nav.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}

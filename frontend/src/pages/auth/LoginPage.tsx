@@ -32,8 +32,9 @@ export default function LoginPage() {
       toast.success(`Bem-vindo, ${res.user.name.split(' ')[0]}!`)
       navigate('/app/dashboard', { replace: true })
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } }
-      const msg = axiosErr.response?.data?.detail ?? 'Credenciais inválidas'
+      const axiosErr = err as { response?: { data?: { detail?: unknown } } }
+      const raw = axiosErr.response?.data?.detail
+      const msg = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.map((e: any) => e?.msg ?? String(e)).join(', ') : 'Credenciais inválidas'
       toast.error(msg)
     } finally {
       setLoading(false)

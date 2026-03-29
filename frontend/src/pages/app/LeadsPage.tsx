@@ -5,8 +5,8 @@ import {
   SpinnerGap, WarningCircle, X, Check, PencilSimple, Trash,
   ArrowRight, Funnel, CaretLeft, CaretRight, XCircle,
 } from '@phosphor-icons/react'
-import { leadsApi, type Lead, type LeadStage, type CreateLeadPayload } from '../../api/leads'
-import { customersApi, type Customer } from '../../api/customers'
+import { leadsApi, type Lead, type LeadStage, type CreateLeadPayload, type LeadListResponse } from '../../api/leads'
+import { customersApi, type Customer, type CustomerListResponse } from '../../api/customers'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ function LeadModal({ initial, onClose, onSave, saving }: ModalProps) {
   const [source, setSource] = useState(initial?.source ?? 'manual')
   const [customerSearch, setCustomerSearch] = useState('')
 
-  const { data: customers } = useQuery({
+  const { data: customers } = useQuery<CustomerListResponse>({
     queryKey: ['customers-select', customerSearch],
     queryFn: () => customersApi.list({ search: customerSearch || undefined, limit: 10 }),
     staleTime: 30_000,
@@ -369,7 +369,7 @@ export default function LeadsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError } = useQuery<LeadListResponse>({
     queryKey: ['leads', search, stageFilter, page],
     queryFn: () => leadsApi.list({
       search: search || undefined,

@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore'
 import toast from 'react-hot-toast'
 
 const schema = z.object({
-  user_name: z.string().min(2, 'Nome obrigatório'),
+  name: z.string().min(2, 'Nome obrigatório'),
   email: z.string().email('E-mail inválido'),
   password: z.string().min(8, 'Mínimo 8 caracteres'),
   tenant_name: z.string().min(2, 'Nome da empresa obrigatório'),
@@ -17,16 +17,17 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
-const PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter — Grátis',
-  professional: 'Professional — R$ 197/mês',
-  enterprise: 'Enterprise — Sob consulta',
+const PLAN_LABELS: Record<string, Record<string, string>> = {
+  starter: { monthly: 'Starter — R$ 297/mês', annual: 'Starter — R$ 222/mês (anual)' },
+  pro:     { monthly: 'Pro — R$ 497/mês',     annual: 'Pro — R$ 372/mês (anual)' },
+  enterprise: { monthly: 'Enterprise — Sob consulta', annual: 'Enterprise — Sob consulta' },
 }
 
 export default function SignupPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const plan = searchParams.get('plan') ?? 'starter'
+  const isAnnual = searchParams.get('billing') === 'annual'
   const isDemo = searchParams.get('demo') === 'true'
   const setAuth = useAuthStore(s => s.setAuth)
   const [showPass, setShowPass] = useState(false)
@@ -34,7 +35,7 @@ export default function SignupPage() {
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { tenant_slug: '' },
+    defaultValues: { tenant_slug: '', name: '' },
   })
 
   // Auto-generate slug from company name
@@ -48,13 +49,14 @@ export default function SignupPage() {
   const onSubmit = async (data: FormData) => {
     setLoading(true)
     try {
-      const res = await authApi.register({ ...data, plan })
+      const res = await authApi.register(data)
       setAuth(res.access_token, res.user, res.tenant)
       toast.success(`Conta criada! Bem-vindo, ${res.user.name.split(' ')[0]}!`)
-      navigate('/app/dashboard', { replace: true })
+      navigate('/app/onboarding', { replace: true })
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } }
-      const msg = axiosErr.response?.data?.detail ?? 'Erro ao criar conta. Tente novamente.'
+      const axiosErr = err as { response?: { data?: { detail?: unknown } } }
+      const raw = axiosErr.response?.data?.detail
+      const msg = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.map((e: any) => e?.msg ?? String(e)).join(', ') : 'Erro ao criar conta. Tente novamente.'
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -87,7 +89,7 @@ export default function SignupPage() {
           )}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-8">
             <p className="text-xs text-zinc-500 mb-1 uppercase tracking-wider">Plano selecionado</p>
-            <p className="text-lg font-bold text-white">{PLAN_LABELS[plan] ?? PLAN_LABELS.starter}</p>
+            <p className="text-lg font-bold text-white">{(PLAN_LABELS[plan] ?? PLAN_LABELS.starter)[isAnnual ? 'annual' : 'monthly']}</p>
           </div>
           <h1 className="text-4xl font-bold text-white tracking-tight leading-tight mb-4">
             Sua operação começa agora.
@@ -129,11 +131,11 @@ export default function SignupPage() {
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1.5">Nome completo</label>
               <input
-                {...register('user_name')}
+                {...register('name')}
                 placeholder="João Silva"
                 className="w-full px-4 py-3 rounded-xl border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ABAB5]/40 focus:border-[#0ABAB5] transition-all placeholder:text-zinc-400"
               />
-              {errors.user_name && <p className="text-xs text-red-500 mt-1">{errors.user_name.message}</p>}
+              {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
             </div>
 
             <div>

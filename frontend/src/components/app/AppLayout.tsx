@@ -1,12 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
+import TrialBanner from './TrialBanner'
+import { useAuthStore } from '../../store/authStore'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { tenant } = useAuthStore()
+
+  // Redirect new users (no onboarding completed) to wizard
+  useEffect(() => {
+    if (tenant?.id && !localStorage.getItem(`onboarding_${tenant.id}`)) {
+      navigate('/app/onboarding', { replace: true })
+    }
+  }, [tenant?.id])
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -41,6 +52,7 @@ export default function AppLayout() {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 lg:ml-0">
+        <TrialBanner />
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto page-enter pb-20 lg:pb-0">
           <Outlet />

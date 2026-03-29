@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, MagnifyingGlass, Plus, WhatsappLogo, Phone, EnvelopeSimple,
@@ -171,10 +172,16 @@ function DeleteConfirm({ name, onConfirm, onCancel, deleting }: { name: string; 
 
 // ─── Dropdown Menu ─────────────────────────────────────────────────────────────
 
-function ActionMenu({ onEdit, onDelete, onClose }: { onEdit: () => void; onDelete: () => void; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-40" onClick={onClose}>
-      <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl border border-zinc-100 shadow-lg py-1 z-50" onClick={e => e.stopPropagation()}>
+interface MenuPos { top: number; right: number }
+
+function ActionMenu({ pos, onEdit, onDelete, onClose }: { pos: MenuPos; onEdit: () => void; onDelete: () => void; onClose: () => void }) {
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        className="fixed w-40 bg-white rounded-xl border border-zinc-100 shadow-lg py-1 z-50"
+        style={{ top: pos.top, right: pos.right }}
+      >
         <button onClick={() => { onEdit(); onClose() }}
           className="flex items-center gap-2 w-full px-3 py-2 text-[13px] text-zinc-600 hover:bg-zinc-50 transition-colors">
           <PencilSimple size={14} /> Editar
@@ -184,7 +191,8 @@ function ActionMenu({ onEdit, onDelete, onClose }: { onEdit: () => void; onDelet
           <Trash size={14} /> Excluir
         </button>
       </div>
-    </div>
+    </>,
+    document.body
   )
 }
 
@@ -199,7 +207,7 @@ export default function CustomersPage() {
   const [page, setPage] = useState(0)
   const [modal, setModal] = useState<'create' | Customer | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState<{ id: string } & MenuPos | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customers', search, page],
@@ -393,13 +401,18 @@ export default function CustomersPage() {
                       {c.is_active ? 'Ativo' : 'Inativo'}
                     </span>
                     <p className="text-[12px] text-zinc-400">{fmtDate(c.created_at)}</p>
-                    <div className="relative">
-                      <button onClick={() => setMenuOpen(menuOpen === c.id ? null : c.id)}
+                    <div>
+                      <button
+                        onClick={e => {
+                          const r = e.currentTarget.getBoundingClientRect()
+                          setMenuOpen(menuOpen?.id === c.id ? null : { id: c.id, top: r.bottom + 4, right: window.innerWidth - r.right })
+                        }}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 transition-all">
                         <DotsThreeVertical size={16} weight="bold" />
                       </button>
-                      {menuOpen === c.id && (
+                      {menuOpen?.id === c.id && (
                         <ActionMenu
+                          pos={menuOpen}
                           onEdit={() => setModal(c)}
                           onDelete={() => setDeleteTarget(c)}
                           onClose={() => setMenuOpen(null)}
@@ -419,14 +432,18 @@ export default function CustomersPage() {
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusStyle}`}>
                               {c.is_active ? 'Ativo' : 'Inativo'}
                             </span>
-                            <button onClick={() => setMenuOpen(menuOpen === c.id ? null : c.id)}
+                            <button
+                              onClick={e => {
+                                const r = e.currentTarget.getBoundingClientRect()
+                                setMenuOpen(menuOpen?.id === c.id ? null : { id: c.id, top: r.bottom + 4, right: window.innerWidth - r.right })
+                              }}
                               className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400">
                               <DotsThreeVertical size={16} weight="bold" />
                             </button>
+                            {menuOpen?.id === c.id && (
+                              <ActionMenu pos={menuOpen} onEdit={() => setModal(c)} onDelete={() => setDeleteTarget(c)} onClose={() => setMenuOpen(null)} />
+                            )}
                           </div>
-                          {menuOpen === c.id && (
-                            <ActionMenu onEdit={() => setModal(c)} onDelete={() => setDeleteTarget(c)} onClose={() => setMenuOpen(null)} />
-                          )}
                         </div>
                         {c.company_name && <p className="text-[12px] text-zinc-400 mb-2.5">{c.company_name}</p>}
                         <div className="flex items-center gap-2 flex-wrap">

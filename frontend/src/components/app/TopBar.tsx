@@ -64,10 +64,14 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         </button>
 
         <div className="flex items-center gap-2.5 pl-3 border-l border-zinc-200/60">
-          <div
-            className="w-8 h-8 rounded-full bg-[#0ABAB5] flex items-center justify-center text-white text-xs font-bold shadow-[0_2px_8px_rgba(10,186,181,0.3)] cursor-pointer"
-          >
-            {initials}
+          <div className="w-8 h-8 rounded-full overflow-hidden shadow-[0_2px_8px_rgba(10,186,181,0.3)] cursor-pointer shrink-0">
+            {user?.avatar_url ? (
+              <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-[#0ABAB5] flex items-center justify-center text-white text-xs font-bold">
+                {initials}
+              </div>
+            )}
           </div>
           <div className="hidden md:block">
             <p className="text-[13px] font-semibold text-[#1D1D1F] leading-tight">{user?.name?.split(' ')[0]}</p>
