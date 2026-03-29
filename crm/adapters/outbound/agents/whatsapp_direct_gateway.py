@@ -17,14 +17,17 @@ class WhatsAppDirectGateway(WhatsAppGatewayPort):
         self._api_key = api_key or settings.gateway_api_key
         headers = {}
         if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
+            headers["X-Api-Key"] = self._api_key
         self._client = httpx.AsyncClient(timeout=10.0, headers=headers)
 
     async def send_message(self, session: str, chat_id: str, text: str) -> None:
-        await self._client.post(
+        resp = await self._client.post(
             f"{self._base_url}/api/sendText",
             json={"session": session, "chatId": chat_id, "text": text},
         )
+        if resp.status_code >= 400:
+            logger.error("whatsapp_send_failed", status=resp.status_code, body=resp.text[:200])
+        resp.raise_for_status()
 
     async def send_typing(self, session: str, chat_id: str, active: bool) -> None:
         endpoint = "startTyping" if active else "stopTyping"

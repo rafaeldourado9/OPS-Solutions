@@ -49,7 +49,9 @@ class QdrantRagAdapter(RagDocumentPort):
             f"{self._qdrant}/collections/{collection}",
             json={"vectors": {"size": _VECTOR_SIZE, "distance": "Cosine"}},
         )
-        resp.raise_for_status()
+        # 200 = created, 409 = already exists (concurrent creation) — both are fine
+        if resp.status_code not in (200, 409):
+            resp.raise_for_status()
 
     async def list_documents(self, collection: str) -> list[RagDocument]:
         # Scroll through all points and aggregate unique doc names
@@ -86,9 +88,14 @@ class QdrantRagAdapter(RagDocumentPort):
         ]
 
     async def ingest_document(
-        self, collection: str, name: str, text_chunks: list[str]
+        self, collection: str, name: str, text_chunks: list[str], agent_id: str = "",
     ) -> int:
         await self._ensure_collection(collection)
+
+        # Derive agent_id from collection name if not provided (e.g. "mab_rules" → "mab")
+        effective_agent_id = agent_id or (
+            collection.removesuffix("_rules") if collection.endswith("_rules") else ""
+        )
 
         ingested_at = datetime.now(timezone.utc).isoformat()
         points = []
@@ -100,14 +107,18 @@ class QdrantRagAdapter(RagDocumentPort):
                 logger.warning("embedding_failed", chunk_preview=chunk[:50], error=str(e))
                 continue
 
+            payload: dict = {
+                "doc_name": name,
+                "text": chunk,
+                "ingested_at": ingested_at,
+            }
+            if effective_agent_id:
+                payload["agent_id"] = effective_agent_id
+
             points.append({
                 "id": str(uuid.uuid4()),
                 "vector": vector,
-                "payload": {
-                    "doc_name": name,
-                    "text": chunk,
-                    "ingested_at": ingested_at,
-                },
+                "payload": payload,
             })
 
         if not points:

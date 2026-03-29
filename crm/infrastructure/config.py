@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Qdrant (read-only, for RAG listing)
     qdrant_url: str = "http://localhost:6333"
 
+    # LLM (Gemini) — used for AI-powered template field analysis
+    gemini_api_key: str = ""
+    gemini_analyzer_model: str = "gemini-2.0-flash"
+
     # Email (SMTP)
     smtp_host: str = "smtp-relay.brevo.com"
     smtp_port: int = 587
@@ -41,6 +45,15 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     smtp_tls: bool = True
     email_from: str = "OPS Solutions <suporte@ops.solutions.com>"
+
+    # App public URL (used in password reset emails)
+    app_url: str = "http://localhost:3001"
+
+    # Mercado Pago
+    mercadopago_access_token: str = ""
+    mercadopago_webhook_secret: str = ""
+    mp_starter_price: float = 297.0
+    mp_pro_price: float = 497.0
 
     # Server
     host: str = "0.0.0.0"
