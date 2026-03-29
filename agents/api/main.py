@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from adapters.inbound.waha_webhook import router as webhook_router
 from api.agent_registry import AgentInstance, AgentRegistry
 from api.dependencies import build_agent_instance
-from infrastructure.config_loader import get_config
+from infrastructure.config_loader import get_config, load_config
 from infrastructure.postgres import close_engine, create_tables
 from infrastructure.rate_limiter import RateLimiter
 from infrastructure.redis_client import (
@@ -84,12 +84,71 @@ def _resolve_agent_ids() -> list[str]:
     Return the list of agent IDs to load.
 
     Checks AGENT_IDS (comma-separated) first, then AGENT_ID, then 'empresa_x'.
+    Special value "auto" scans the agents directory and loads all valid agents.
     """
     multi = os.environ.get("AGENT_IDS", "").strip()
-    if multi:
+    if multi and multi.lower() != "auto":
         return [a.strip() for a in multi.split(",") if a.strip()]
+
+    if multi.lower() == "auto":
+        return _auto_discover_agents()
+
     single = os.environ.get("AGENT_ID", "empresa_x").strip()
     return [single]
+
+
+def _auto_discover_agents() -> list[str]:
+    """
+    Read the CRM-managed manifest to determine which agents to load.
+
+    The CRM writes 'active-agents.json' to the shared agents directory whenever
+    tenants create or delete agents.  This ensures only tenant-owned agents are
+    loaded — no stale or test directories interfere.
+
+    Manifest format:  ["tenant-slug-agent1", "tenant-slug-agent2", ...]
+
+    Falls back to scanning the directory for agents with crm.enabled if the
+    manifest does not exist (first boot before CRM has started).
+    """
+    import json as _json
+    from infrastructure.config_loader import _agents_dir, load_config
+
+    agents_path = _agents_dir()
+    manifest = agents_path / "active-agents.json"
+
+    if manifest.exists():
+        try:
+            agent_ids = _json.loads(manifest.read_text(encoding="utf-8"))
+            # Validate each agent has a business.yml
+            valid = [a for a in agent_ids if (agents_path / a / "business.yml").exists()]
+            logger.info("Loaded %d agents from CRM manifest: %s", len(valid), valid)
+            return valid
+        except Exception as exc:
+            logger.warning("Failed to read manifest — falling back to scan: %s", exc)
+
+    # Fallback: scan directory for CRM-enabled agents
+    if not agents_path.exists():
+        logger.warning("Agents directory not found: %s", agents_path)
+        return []
+
+    skip = {"template", "__pycache__"}
+    discovered = []
+    for entry in sorted(agents_path.iterdir()):
+        if not entry.is_dir():
+            continue
+        if entry.name.startswith(".") or entry.name in skip:
+            continue
+        if not (entry / "business.yml").exists():
+            continue
+        try:
+            cfg = load_config(entry.name)
+            if cfg.crm.enabled:
+                discovered.append(entry.name)
+        except Exception as exc:
+            logger.warning("Skipping agent '%s' — config error: %s", entry.name, exc)
+
+    logger.info("Fallback scan found %d CRM-enabled agents: %s", len(discovered), discovered)
+    return discovered
 
 
 # ---------------------------------------------------------------------------
@@ -124,17 +183,38 @@ async def lifespan(app: FastAPI):
     # Build all agent instances
     registry = AgentRegistry()
     agent_sessions_env = os.environ.get("AGENT_SESSION", "").strip()
+    # Gateway session name — all agents share the same gateway session so that
+    # incoming messages (which carry session="default") can be routed to them.
+    gateway_session = agent_sessions_env or os.environ.get("SESSION_NAME", "default")
+    redis_startup = await get_redis()
     for agent_id in agent_ids:
         try:
             config = get_config(agent_id)
-            # AGENT_SESSION overrides the session name for single-agent mode
-            # (allows ops_solutions to respond to WAHA session "default")
-            session_override = agent_sessions_env if len(agent_ids) == 1 and agent_sessions_env else None
+            # Use the gateway session for all agents so webhook routing works.
+            # Individual agents can override via waha_session in their config.
+            session_override = config.agent.waha_session or gateway_session
             instance = await build_agent_instance(agent_id, config, session=session_override)
             registry.register(instance)
+
+            # Check Redis for a persisted agent switch — restore it so restarts don't revert
+            saved = await redis_startup.get(f"active_agent:{instance.session}")
+            if saved:
+                saved_id = saved.decode() if isinstance(saved, bytes) else saved
+                if saved_id != agent_id:
+                    try:
+                        get_config.cache_clear()
+                        saved_config = load_config(saved_id)
+                        saved_instance = await build_agent_instance(saved_id, saved_config, session=instance.session)
+                        registry.replace_agent(agent_id, saved_instance)
+                        instance = saved_instance
+                        config = saved_config
+                        logger.info("Restored persisted agent switch: %s → %s", agent_id, saved_id)
+                    except Exception:
+                        logger.exception("Failed to restore saved agent '%s' — keeping '%s'", saved_id, agent_id)
+
             logger.info(
                 "Agent ready: id=%s session=%s name=%s llm=%s/%s",
-                agent_id,
+                instance.agent_id,
                 instance.session,
                 config.agent.name,
                 config.llm.provider,
@@ -280,9 +360,13 @@ async def _on_debounce_expired(key: str) -> None:
         return
 
     user_texts: list[str] = []
+    push_name: str = ""
     for raw in raw_messages:
         try:
-            text = json.loads(raw).get("text", "")
+            parsed = json.loads(raw)
+            text = parsed.get("text", "")
+            if not push_name:
+                push_name = parsed.get("push_name", "")
         except (json.JSONDecodeError, AttributeError):
             text = raw
         if text:
@@ -306,6 +390,7 @@ async def _on_debounce_expired(key: str) -> None:
             chat_id=chat_id,
             user_texts=user_texts,
             task_id=task_id,
+            push_name=push_name,
         )
     )
 
@@ -335,6 +420,139 @@ app.include_router(webhook_router, tags=["webhook"])
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
+
+
+@app.post("/set-active/{agent_id}", tags=["admin"])
+async def set_active_agent(agent_id: str) -> dict:
+    """
+    Make agent_id the active agent, replacing whoever is currently running.
+    Does not need to know the current agent_id — reads it from the registry.
+    Persists the choice in Redis so container restarts restore it.
+    """
+    from fastapi import HTTPException
+    registry: AgentRegistry = getattr(app.state, "registry", None)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Registry not ready")
+
+    instances = registry.all_instances()
+    if not instances:
+        raise HTTPException(status_code=503, detail="No agents running")
+
+    current = instances[0]  # single-agent mode: always the first one
+
+    get_config.cache_clear()
+    new_config = load_config(agent_id)
+    new_instance = await build_agent_instance(agent_id, new_config, session=current.session)
+
+    if current.agent_id == agent_id:
+        registry.replace(new_instance)
+    else:
+        registry.replace_agent(current.agent_id, new_instance)
+
+    redis = await get_redis()
+    await redis.set(f"active_agent:{current.session}", agent_id)
+
+    app.state.agent_id = agent_id
+    app.state.config = new_config
+    app.state.debouncer = new_instance.debouncer
+    app.state.process_message = new_instance.process_message
+    app.state.media = new_instance.media
+
+    logger.info("Active agent set: %s → %s (session=%s)", current.agent_id, agent_id, current.session)
+    return {"status": "ok", "agent_id": agent_id, "name": new_config.agent.name}
+
+
+@app.post("/load/{agent_id}", tags=["admin"])
+async def load_agent(agent_id: str) -> dict:
+    """
+    Dynamically load a new agent into the registry without restarting.
+    Called by the CRM when a tenant creates a new agent via onboarding.
+    If the agent is already loaded, reloads its config instead.
+    """
+    from fastapi import HTTPException
+    registry: AgentRegistry = getattr(app.state, "registry", None)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Registry not ready")
+
+    # If already loaded, just reload
+    existing = registry.get_by_agent_id(agent_id)
+    if existing is not None:
+        get_config.cache_clear()
+        new_config = load_config(agent_id)
+        new_instance = await build_agent_instance(agent_id, new_config, session=existing.session)
+        registry.replace(new_instance)
+        logger.info("Agent '%s' reloaded via /load", agent_id)
+        return {"status": "reloaded", "agent_id": agent_id, "name": new_config.agent.name}
+
+    # Load new agent — use the gateway session so it receives webhook messages
+    gateway_session = os.environ.get("AGENT_SESSION", "") or os.environ.get("SESSION_NAME", "default")
+    get_config.cache_clear()
+    new_config = load_config(agent_id)
+    session_name = new_config.agent.waha_session or gateway_session
+    new_instance = await build_agent_instance(agent_id, new_config, session=session_name)
+    registry.register(new_instance)
+
+    logger.info("Agent '%s' loaded dynamically (session=%s)", agent_id, session_name)
+    return {"status": "loaded", "agent_id": agent_id, "name": new_config.agent.name}
+
+
+@app.delete("/unload/{agent_id}", tags=["admin"])
+async def unload_agent(agent_id: str) -> dict:
+    """
+    Remove an agent from the registry. Called by CRM when an agent is deleted.
+    """
+    from fastapi import HTTPException
+    registry: AgentRegistry = getattr(app.state, "registry", None)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Registry not ready")
+
+    instance = registry.get_by_agent_id(agent_id)
+    if instance is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+    # Don't allow unloading the last agent
+    if len(registry) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot unload the last running agent")
+
+    registry.remove(agent_id)
+    logger.info("Agent '%s' unloaded from registry", agent_id)
+    return {"status": "unloaded", "agent_id": agent_id}
+
+
+@app.post("/reload/{agent_id}", tags=["admin"])
+async def reload_agent(agent_id: str) -> dict:
+    """Reload agent config from business.yml without restarting the process."""
+    registry: AgentRegistry = getattr(app.state, "registry", None)
+    if registry is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Registry not ready")
+
+    old_instance = registry.get_by_agent_id(agent_id)
+    if old_instance is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found in registry")
+
+    # Clear lru_cache so load_config re-reads from disk
+    get_config.cache_clear()
+
+    # Load fresh config directly (bypassing cache)
+    new_config = load_config(agent_id)
+
+    # Rebuild the full agent instance with fresh config, preserving session name
+    new_instance = await build_agent_instance(agent_id, new_config, session=old_instance.session)
+
+    # Swap the old instance in the registry
+    registry.replace(new_instance)
+
+    # Update backward-compat single-agent state if this was the primary agent
+    if getattr(app.state, "agent_id", None) == agent_id:
+        app.state.config = new_config
+        app.state.debouncer = new_instance.debouncer
+        app.state.process_message = new_instance.process_message
+        app.state.media = new_instance.media
+
+    logger.info("Agent '%s' reloaded: model=%s/%s", agent_id, new_config.llm.provider, new_config.llm.model)
+    return {"status": "reloaded", "agent_id": agent_id, "name": new_config.agent.name}
 
 
 @app.get("/health", tags=["health"])

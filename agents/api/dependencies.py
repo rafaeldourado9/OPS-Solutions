@@ -24,11 +24,18 @@ async def build_primary_llm(config: BusinessConfig):
 
     provider = config.llm.provider.lower()
     if provider == "gemini":
-        return GeminiAdapter(
-            model_name=config.llm.model,
-            temperature=config.llm.temperature,
-            max_tokens=config.llm.max_tokens,
-        )
+        try:
+            if config.llm.api_key:
+                os.environ.setdefault("GEMINI_API_KEY", config.llm.api_key)
+            return GeminiAdapter(
+                model_name=config.llm.model,
+                temperature=config.llm.temperature,
+                max_tokens=config.llm.max_tokens,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Primary LLM provider 'gemini' is misconfigured: {exc}"
+            ) from exc
     elif provider == "ollama":
         return OllamaAdapter(
             model_name=config.llm.model,
@@ -49,11 +56,15 @@ async def build_fallback_llm(config: BusinessConfig) -> Optional[object]:
         return None
 
     if provider == "gemini":
-        return GeminiAdapter(
-            model_name=config.llm.fallback_model,
-            temperature=config.llm.temperature,
-            max_tokens=config.llm.max_tokens,
-        )
+        try:
+            return GeminiAdapter(
+                model_name=config.llm.fallback_model,
+                temperature=config.llm.temperature,
+                max_tokens=config.llm.max_tokens,
+            )
+        except ValueError as exc:
+            logger.warning("Fallback LLM (gemini) skipped — %s", exc)
+            return None
     elif provider == "ollama":
         return OllamaAdapter(
             model_name=config.llm.fallback_model,
@@ -68,6 +79,7 @@ def build_media(config: BusinessConfig):
 
     Uses OpenVoiceTTSAdapter (Gemini + voice cloning) when tts_voice_sample is set,
     otherwise falls back to plain GeminiMediaAdapter.
+    Falls back to NullMediaAdapter when GEMINI_API_KEY is not set.
     """
     import os
     if os.environ.get("USE_NULL_MEDIA", "").lower() == "true":
@@ -82,15 +94,25 @@ def build_media(config: BusinessConfig):
     )
 
     if config.media.tts_voice_sample:
-        from adapters.outbound.media.openvoice_tts_adapter import OpenVoiceTTSAdapter
-        logger.info("TTS: OpenVoice v2 (sample=%s)", config.media.tts_voice_sample)
-        return OpenVoiceTTSAdapter(
-            voice_sample_path=config.media.tts_voice_sample,
-            **gemini_kwargs,
-        )
+        try:
+            from adapters.outbound.media.openvoice_tts_adapter import OpenVoiceTTSAdapter
+            logger.info("TTS: OpenVoice v2 (sample=%s)", config.media.tts_voice_sample)
+            return OpenVoiceTTSAdapter(
+                voice_sample_path=config.media.tts_voice_sample,
+                **gemini_kwargs,
+            )
+        except ValueError as exc:
+            logger.warning("OpenVoiceTTSAdapter skipped — %s. Falling back to NullMediaAdapter.", exc)
+            from adapters.outbound.media.null_media_adapter import NullMediaAdapter
+            return NullMediaAdapter()
 
-    from adapters.outbound.media.gemini_media_adapter import GeminiMediaAdapter
-    return GeminiMediaAdapter(**gemini_kwargs)
+    try:
+        from adapters.outbound.media.gemini_media_adapter import GeminiMediaAdapter
+        return GeminiMediaAdapter(**gemini_kwargs)
+    except ValueError as exc:
+        logger.warning("GeminiMediaAdapter skipped — %s. Falling back to NullMediaAdapter.", exc)
+        from adapters.outbound.media.null_media_adapter import NullMediaAdapter
+        return NullMediaAdapter()
 
 
 def build_gateway(config: BusinessConfig, agent_id: str = "default"):

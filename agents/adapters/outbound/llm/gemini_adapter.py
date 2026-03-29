@@ -134,9 +134,23 @@ class GeminiAdapter(LLMPort):
             response = await model.generate_content_async(
                 contents=gemini_messages,
                 generation_config=self._generation_config,
+                safety_settings={
+                    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+                },
                 stream=False,
             )
-            return response.text or ""
+            try:
+                return response.text or ""
+            except ValueError:
+                # finish_reason != STOP (e.g. SAFETY=2, RECITATION=3) — return empty
+                finish = None
+                if response.candidates:
+                    finish = response.candidates[0].finish_reason
+                logger.warning("Gemini response blocked/empty for model=%s finish_reason=%s", self._model_name, finish)
+                return ""
         except Exception:
             logger.exception("Gemini generate failed for model=%s", self._model_name)
             raise

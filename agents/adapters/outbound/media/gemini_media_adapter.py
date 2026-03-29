@@ -392,17 +392,7 @@ class GeminiMediaAdapter(MediaPort):
         payload = {
             "contents": [
                 {
-                    "role": "user",
-                    "parts": [{"text": (
-                        "Fale o texto a seguir de forma natural e conversacional, "
-                        "como se estivesse mandando um áudio no WhatsApp para um amigo. "
-                        "Use tom informal, com pausas naturais e ritmo de conversa real. "
-                        "Não soe robótico. Fale em português brasileiro. "
-                        "IMPORTANTE: fale o texto COMPLETO, do início ao fim. "
-                        "Não corte, não resuma, não interrompa. Termine a frase inteira. "
-                        "Se o texto for longo, mantenha o ritmo calmo e constante.\n\n"
-                        f"{text}"
-                    )}],
+                    "parts": [{"text": text}],
                 },
             ],
             "generationConfig": {

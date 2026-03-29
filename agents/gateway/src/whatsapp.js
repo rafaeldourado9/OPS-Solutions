@@ -24,6 +24,9 @@ const path = require("path");
 const fs = require("fs");
 const qrcode = require("qrcode-terminal");
 
+// QR_TTL_MS — QR codes expire after ~60s
+const QR_TTL_MS = 60000;
+
 /**
  * Create and return a WhatsApp client instance.
  *
@@ -44,6 +47,10 @@ async function createWhatsAppClient({ sessionName, authDir, webhookUrl, logger }
   let phoneNumber = null;
   let reconnectAttempts = 0;
   const MAX_RECONNECT_DELAY = 60000;
+
+  // Per-session QR state
+  let _currentQr = null;
+  let _qrReceivedAt = null;
 
   // Media buffer: store downloaded media bytes for recent messages
   // Key: message ID, Value: { data: Buffer, mimetype: string, filename: string }
@@ -86,6 +93,8 @@ async function createWhatsAppClient({ sessionName, authDir, webhookUrl, logger }
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
+        _currentQr = qr;
+        _qrReceivedAt = Date.now();
         logger.info("QR Code received — scan with WhatsApp:");
         qrcode.generate(qr, { small: true });
       }
@@ -115,6 +124,8 @@ async function createWhatsAppClient({ sessionName, authDir, webhookUrl, logger }
         connected = true;
         reconnectAttempts = 0;
         phoneNumber = sock.user?.id?.split(":")[0] || null;
+        _currentQr = null;
+        _qrReceivedAt = null;
         logger.info({ phone: phoneNumber }, "WhatsApp connected!");
       }
     });
@@ -412,6 +423,51 @@ async function createWhatsAppClient({ sessionName, authDir, webhookUrl, logger }
     return { connected, phone: phoneNumber };
   }
 
+  function getQr() {
+    // Return null if expired
+    if (_currentQr && _qrReceivedAt && Date.now() - _qrReceivedAt > QR_TTL_MS) {
+      _currentQr = null;
+      _qrReceivedAt = null;
+    }
+    return { qr: _currentQr, receivedAt: _qrReceivedAt };
+  }
+
+  async function reconnect() {
+    logger.info("Manual reconnect requested");
+    reconnectAttempts = 0; // Reset backoff for fast reconnect
+    _currentQr = null;
+    _qrReceivedAt = null;
+    connected = false;
+    try {
+      sock?.ws?.close();
+    } catch (err) {
+      logger.debug({ err: err.message }, "Socket close on reconnect");
+    }
+  }
+
+  async function logout() {
+    logger.info("Logout requested — clearing session");
+    connected = false;
+    phoneNumber = null;
+    _currentQr = null;
+    _qrReceivedAt = null;
+    try {
+      await sock?.logout();
+    } catch (err) {
+      logger.debug({ err: err.message }, "Baileys logout error (expected on logout)");
+    }
+    // Clear auth folder so next start shows a fresh QR
+    try {
+      fs.rmSync(authPath, { recursive: true, force: true });
+      fs.mkdirSync(authPath, { recursive: true });
+    } catch (err) {
+      logger.warn({ err: err.message }, "Failed to clear auth folder");
+    }
+    // Reconnect to show QR
+    reconnectAttempts = 0;
+    setTimeout(() => connect(), 1000);
+  }
+
   function getMediaFromCache(msgId) {
     return mediaCache.get(msgId) || null;
   }
@@ -432,6 +488,9 @@ async function createWhatsAppClient({ sessionName, authDir, webhookUrl, logger }
     startRecording,
     stopRecording,
     getStatus,
+    getQr,
+    reconnect,
+    logout,
     getMediaFromCache,
   };
 }

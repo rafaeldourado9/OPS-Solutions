@@ -976,9 +976,11 @@ async def waha_webhook(request: Request) -> dict[str, str]:
     # Normal message handling
     # ---------------------------------------------------------------------------
 
+    push_name: str = (payload.get("pushName") or "").strip()
+
     # --- Text message ---
     if not has_media:
-        await _queue(debouncer, chat_id, body_text)
+        await _queue(debouncer, chat_id, body_text, push_name=push_name)
         logger.info("Queued text from chat_id=%s len=%d", chat_id, len(body_text))
         return {"status": "queued", "type": "text"}
 
@@ -993,6 +995,7 @@ async def waha_webhook(request: Request) -> dict[str, str]:
             waha_api_key=waha_api_key,
             session=session_name,
             agent_id=agent_id,
+            push_name=push_name,
         )
     )
     logger.info("Scheduled media processing: chat_id=%s", chat_id)
@@ -1008,19 +1011,20 @@ async def _handle_media(
     waha_api_key: str,
     session: str,
     agent_id: str,
+    push_name: str = "",
 ) -> None:
     """Background task: download + process media, push to debounce buffer."""
     try:
         text = await _process_media(
             payload, media, waha_url, waha_api_key, session, chat_id
         )
-        await _queue(debouncer, chat_id, text)
+        await _queue(debouncer, chat_id, text, push_name=push_name)
         logger.info("Media processed and queued: chat_id=%s len=%d", chat_id, len(text))
     except Exception:
         logger.exception("Unhandled error in _handle_media for chat_id=%s", chat_id)
 
 
-async def _queue(debouncer: MessageDebouncer, chat_id: str, text: str) -> None:
+async def _queue(debouncer: MessageDebouncer, chat_id: str, text: str, push_name: str = "") -> None:
     """Serialise and push a message into the debounce buffer."""
-    data = json.dumps({"text": text, "chat_id": chat_id})
+    data = json.dumps({"text": text, "chat_id": chat_id, "push_name": push_name})
     await debouncer.push_message(chat_id, data)

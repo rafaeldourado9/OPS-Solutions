@@ -1,26 +1,146 @@
 /**
- * Express routes — WAHA-compatible REST API.
+ * Express routes — Multi-session WAHA-compatible REST API.
  *
- * Implements the same endpoints that the Python agent framework expects:
- *   POST /api/sendText        — Send a text message
- *   POST /api/sendFile        — Send a file (image, audio, video, document)
- *   POST /api/sendVoice       — Send a voice message (PTT)
- *   POST /api/startTyping     — Show typing indicator
- *   POST /api/stopTyping      — Stop typing indicator
- *   GET  /api/messages        — Fetch messages (limited, for media re-download)
+ * All send/control routes accept a `session` param (body or query).
+ * If no session specified, uses the first active session (backwards compatible).
+ *
+ * Session management endpoints:
+ *   GET    /api/sessions         — List all sessions
+ *   POST   /api/sessions         — Create a new session
+ *   DELETE /api/sessions/:name   — Remove a session
+ *
+ * Per-session endpoints (use ?session=xxx or body.session):
+ *   POST /api/sendText, /api/sendFile, /api/sendVoice, etc.
+ *   GET  /api/qr, /api/status
+ *   POST /api/restart, /api/logout
  */
 
 const express = require("express");
 
-function createRoutes(wa, logger) {
+function createRoutes(sm, logger) {
   const router = express.Router();
 
-  // POST /api/sendText — Send a text message
+  // Helper: resolve session client from request
+  function getClient(req) {
+    const name = req.body?.session || req.query?.session || null;
+    return sm.getOrDefault(name);
+  }
+
+  function getClientStrict(req) {
+    const name = req.body?.session || req.query?.session;
+    if (!name) return { client: null, error: "session param required" };
+    const client = sm.getSession(name);
+    if (!client) return { client: null, error: `Session '${name}' not found` };
+    return { client, error: null };
+  }
+
+  // ── Session Management ──────────────────────────────────────────────────
+
+  // GET /api/sessions — List all sessions
+  router.get("/sessions", (req, res) => {
+    res.json(sm.listSessions());
+  });
+
+  // POST /api/sessions — Create a new session { name }
+  router.post("/sessions", async (req, res) => {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: "name required" });
+    }
+    if (sm.hasSession(name)) {
+      return res.status(409).json({ error: "Session already exists", name });
+    }
+    try {
+      await sm.createSession(name);
+      res.status(201).json({ status: "created", name });
+    } catch (err) {
+      logger.error({ err: err.message, session: name }, "Failed to create session");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/sessions/:name — Remove a session
+  router.delete("/sessions/:name", async (req, res) => {
+    const { name } = req.params;
+    if (!sm.hasSession(name)) {
+      return res.status(404).json({ error: "Session not found", name });
+    }
+    try {
+      await sm.removeSession(name);
+      res.json({ status: "removed", name });
+    } catch (err) {
+      logger.error({ err: err.message, session: name }, "Failed to remove session");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Per-session QR / Status / Control ───────────────────────────────────
+
+  // GET /api/qr?session=xxx — QR code for a specific session
+  router.get("/qr", (req, res) => {
+    const wa = getClient(req);
+    if (!wa) return res.json({ qr: null, status: "no_session", phone: null, receivedAt: null });
+
+    const { connected, phone } = wa.getStatus();
+    if (connected) {
+      return res.json({ qr: null, status: "connected", phone, receivedAt: null });
+    }
+    const { qr, receivedAt } = wa.getQr();
+    if (qr) {
+      return res.json({ qr, status: "qr_ready", phone: null, receivedAt });
+    }
+    res.json({ qr: null, status: "connecting", phone: null, receivedAt: null });
+  });
+
+  // GET /api/status?session=xxx — Status of a specific session
+  router.get("/status", (req, res) => {
+    const name = req.query.session;
+    if (name) {
+      const client = sm.getSession(name);
+      if (!client) return res.json({ status: "not_found", session: name });
+      const { connected, phone } = client.getStatus();
+      return res.json({ status: connected ? "connected" : "disconnected", phone, session: name });
+    }
+    // No session specified — return all
+    res.json(sm.listSessions());
+  });
+
+  // POST /api/restart?session=xxx — Restart a specific session
+  router.post("/restart", async (req, res) => {
+    const wa = getClient(req);
+    if (!wa) return res.status(404).json({ error: "Session not found" });
+    try {
+      await wa.reconnect();
+      res.json({ status: "restarting" });
+    } catch (err) {
+      logger.error({ err: err.message }, "Restart failed");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/logout?session=xxx — Logout a specific session
+  router.post("/logout", async (req, res) => {
+    const wa = getClient(req);
+    if (!wa) return res.status(404).json({ error: "Session not found" });
+    try {
+      await wa.logout();
+      res.json({ status: "logged_out" });
+    } catch (err) {
+      logger.error({ err: err.message }, "Logout failed");
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Message Sending (backwards compatible) ──────────────────────────────
+
+  // POST /api/sendText
   router.post("/sendText", async (req, res) => {
     const { chatId, text } = req.body;
     if (!chatId || !text) {
       return res.status(400).json({ error: "chatId and text required" });
     }
+    const wa = getClient(req);
+    if (!wa) return res.status(503).json({ error: "No active session" });
     try {
       await wa.sendText(chatId, text);
       res.json({ status: "sent", chatId });
@@ -30,13 +150,14 @@ function createRoutes(wa, logger) {
     }
   });
 
-  // POST /api/sendFile — Send a file (WAHA-compatible format)
-  // Body: { chatId, file: { mimetype, filename, data (base64) }, caption, session }
+  // POST /api/sendFile
   router.post("/sendFile", async (req, res) => {
     const { chatId, file, caption } = req.body;
     if (!chatId || !file?.data) {
       return res.status(400).json({ error: "chatId and file.data required" });
     }
+    const wa = getClient(req);
+    if (!wa) return res.status(503).json({ error: "No active session" });
 
     const buffer = Buffer.from(file.data, "base64");
     const mimetype = file.mimetype || "application/octet-stream";
@@ -51,14 +172,14 @@ function createRoutes(wa, logger) {
     }
   });
 
-  // POST /api/sendVoice — Send a voice message (PTT)
-  // Body: { chatId, file: { data (base64), mimetype }, session }
-  // Also accepts: { chatId, audio (base64), mimetype }
+  // POST /api/sendVoice
   router.post("/sendVoice", async (req, res) => {
     const { chatId } = req.body;
     if (!chatId) {
       return res.status(400).json({ error: "chatId required" });
     }
+    const wa = getClient(req);
+    if (!wa) return res.status(503).json({ error: "No active session" });
 
     let buffer, mimetype;
     if (req.body.file?.data) {
@@ -80,12 +201,14 @@ function createRoutes(wa, logger) {
     }
   });
 
-  // POST /api/sendImage — Send an image (convenience endpoint)
+  // POST /api/sendImage
   router.post("/sendImage", async (req, res) => {
     const { chatId, file, caption } = req.body;
     if (!chatId || !file?.data) {
       return res.status(400).json({ error: "chatId and file.data required" });
     }
+    const wa = getClient(req);
+    if (!wa) return res.status(503).json({ error: "No active session" });
     const buffer = Buffer.from(file.data, "base64");
     const mimetype = file.mimetype || "image/jpeg";
     const filename = file.filename || "image.jpg";
@@ -99,12 +222,14 @@ function createRoutes(wa, logger) {
     }
   });
 
-  // POST /api/sendVideo — Send a video (convenience endpoint)
+  // POST /api/sendVideo
   router.post("/sendVideo", async (req, res) => {
     const { chatId, file, caption } = req.body;
     if (!chatId || !file?.data) {
       return res.status(400).json({ error: "chatId and file.data required" });
     }
+    const wa = getClient(req);
+    if (!wa) return res.status(503).json({ error: "No active session" });
     const buffer = Buffer.from(file.data, "base64");
     const mimetype = file.mimetype || "video/mp4";
 
@@ -117,67 +242,48 @@ function createRoutes(wa, logger) {
     }
   });
 
-  // POST /api/startTyping — Show typing indicator
+  // POST /api/startTyping
   router.post("/startTyping", async (req, res) => {
     const { chatId } = req.body;
-    if (!chatId) {
-      return res.status(400).json({ error: "chatId required" });
-    }
-    try {
-      await wa.startTyping(chatId);
-      res.json({ status: "ok" });
-    } catch (err) {
-      res.json({ status: "ok" }); // Non-critical
-    }
+    if (!chatId) return res.status(400).json({ error: "chatId required" });
+    const wa = getClient(req);
+    if (!wa) return res.json({ status: "ok" });
+    try { await wa.startTyping(chatId); } catch {}
+    res.json({ status: "ok" });
   });
 
-  // POST /api/stopTyping — Stop typing indicator
+  // POST /api/stopTyping
   router.post("/stopTyping", async (req, res) => {
     const { chatId } = req.body;
-    if (!chatId) {
-      return res.status(400).json({ error: "chatId required" });
-    }
-    try {
-      await wa.stopTyping(chatId);
-      res.json({ status: "ok" });
-    } catch (err) {
-      res.json({ status: "ok" }); // Non-critical
-    }
+    if (!chatId) return res.status(400).json({ error: "chatId required" });
+    const wa = getClient(req);
+    if (!wa) return res.json({ status: "ok" });
+    try { await wa.stopTyping(chatId); } catch {}
+    res.json({ status: "ok" });
   });
 
-  // POST /api/startRecording — Show "recording audio" indicator
+  // POST /api/startRecording
   router.post("/startRecording", async (req, res) => {
     const { chatId } = req.body;
-    if (!chatId) {
-      return res.status(400).json({ error: "chatId required" });
-    }
-    try {
-      await wa.startRecording(chatId);
-      res.json({ status: "ok" });
-    } catch (err) {
-      res.json({ status: "ok" }); // Non-critical
-    }
+    if (!chatId) return res.status(400).json({ error: "chatId required" });
+    const wa = getClient(req);
+    if (!wa) return res.json({ status: "ok" });
+    try { await wa.startRecording(chatId); } catch {}
+    res.json({ status: "ok" });
   });
 
-  // POST /api/stopRecording — Stop "recording audio" indicator
+  // POST /api/stopRecording
   router.post("/stopRecording", async (req, res) => {
     const { chatId } = req.body;
-    if (!chatId) {
-      return res.status(400).json({ error: "chatId required" });
-    }
-    try {
-      await wa.stopRecording(chatId);
-      res.json({ status: "ok" });
-    } catch (err) {
-      res.json({ status: "ok" }); // Non-critical
-    }
+    if (!chatId) return res.status(400).json({ error: "chatId required" });
+    const wa = getClient(req);
+    if (!wa) return res.json({ status: "ok" });
+    try { await wa.stopRecording(chatId); } catch {}
+    res.json({ status: "ok" });
   });
 
-  // GET /api/messages — Limited message retrieval (for media re-download compatibility)
-  // This endpoint exists for WAHA compatibility but media is already embedded in webhooks
+  // GET /api/messages — Compatibility stub
   router.get("/messages", async (req, res) => {
-    // Our gateway embeds media directly in webhook payloads,
-    // so this endpoint is rarely needed. Return empty for compatibility.
     res.json([]);
   });
 

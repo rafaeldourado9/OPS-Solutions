@@ -53,6 +53,14 @@ class LLMConfig(BaseModel):
     fallback_model: str = "llama3.1:8b"
     temperature: float = 0.3
     max_tokens: int = 400
+    api_key: Optional[str] = Field(
+        default=None,
+        description="API key for the primary LLM provider. Overrides env var when set.",
+    )
+    ollama_url: Optional[str] = Field(
+        default=None,
+        description="Ollama server URL for this agent. Overrides OLLAMA_URL env var when set.",
+    )
 
 
 class MessagingConfig(BaseModel):
@@ -87,7 +95,11 @@ class MediaConfig(BaseModel):
     video_frame_interval: int = 5
     # TTS (text-to-speech) — agent responds with voice messages sometimes
     tts_enabled: bool = False
-    tts_voice: str = "Kore"         # Gemini TTS voice name (fallback when no voice_sample)
+    tts_voice: str = "Kore"         # Gemini TTS voice name (used when tts_voices is empty)
+    tts_voices: list[str] = Field(  # Two voices that alternate per response (male + female)
+        default_factory=list,
+        description="If set, the agent alternates between these voices each response.",
+    )
     tts_voice_sample: str = ""      # Path to reference audio for OpenVoice cloning
     tts_chance: float = 0.15        # Probability of responding with audio (0.0 - 1.0)
 

@@ -70,17 +70,22 @@ class AgentRegistry:
     """
     Maps WAHA session names to AgentInstance objects.
 
+    Two indices are maintained in sync:
+      _by_session  — session → ordered list of instances (for webhook routing)
+      _by_agent_id — agent_id → instance (O(1) lookup by id)
+
     Multiple agents can share the same session — they are disambiguated by
     the sender's phone number via target_phones in their config.
     """
 
     def __init__(self) -> None:
-        # session → ordered list of instances (registration order preserved)
         self._by_session: dict[str, list[AgentInstance]] = {}
+        self._by_agent_id: dict[str, AgentInstance] = {}
 
     def register(self, instance: AgentInstance) -> None:
-        """Register an agent instance under its session name."""
+        """Register an agent instance under its session name and agent_id."""
         self._by_session.setdefault(instance.session, []).append(instance)
+        self._by_agent_id[instance.agent_id] = instance
 
     def get_by_session_and_phone(self, session: str, chat_id: str) -> Optional[AgentInstance]:
         """
@@ -89,7 +94,7 @@ class AgentRegistry:
         Lookup order:
           1. Find all agents registered for `session`.
           2. Single-agent fallback (any session → the only agent).
-          3. "default" session → first registered agents list.
+          3. "default" session → first registered session's agents.
           4. Among candidates, prefer a targeted agent whose target_phones
              matches the sender's phone number.
           5. Fall back to the catch-all agent (no target_phones) for this session.
@@ -97,11 +102,9 @@ class AgentRegistry:
         candidates = self._by_session.get(session)
 
         if not candidates:
-            all_instances = self.all_instances()
-            # Single-agent fallback
-            if len(all_instances) == 1:
-                return all_instances[0]
-            # WAHA "default" session → first registered session's agents
+            all_inst = list(self._by_agent_id.values())
+            if len(all_inst) == 1:
+                return all_inst[0]
             if session == "default" and self._by_session:
                 candidates = next(iter(self._by_session.values()))
             else:
@@ -111,8 +114,7 @@ class AgentRegistry:
 
         # Priority 1: targeted agent matching this phone
         for inst in candidates:
-            target = inst.config.agent.target_phones
-            if target and _phone_matches(phone, target):
+            if inst.config.agent.target_phones and _phone_matches(phone, inst.config.agent.target_phones):
                 return inst
 
         # Priority 2: catch-all agent (no target_phones restriction)
@@ -120,15 +122,11 @@ class AgentRegistry:
             if not inst.config.agent.target_phones:
                 return inst
 
-        # Last resort: first candidate
         return candidates[0]
 
     def get_by_agent_id(self, agent_id: str) -> Optional[AgentInstance]:
-        """Return the AgentInstance for a specific agent_id."""
-        for inst in self.all_instances():
-            if inst.agent_id == agent_id:
-                return inst
-        return None
+        """O(1) lookup by agent_id."""
+        return self._by_agent_id.get(agent_id)
 
     def get_by_command(self, command: str) -> Optional[AgentInstance]:
         """
@@ -139,9 +137,12 @@ class AgentRegistry:
           - /{agent.name}     e.g. /rafael  (from name: "Rafael")
         """
         cmd = command.lstrip("/").lower().strip()
-        for inst in self.all_instances():
-            if inst.agent_id.lower() == cmd:
-                return inst
+        # O(1) check by agent_id first
+        inst = self._by_agent_id.get(cmd)
+        if inst:
+            return inst
+        # Linear scan by name (names are not indexed)
+        for inst in self._by_agent_id.values():
             if inst.config.agent.name.lower() == cmd:
                 return inst
         return None
@@ -154,16 +155,57 @@ class AgentRegistry:
         instances = self._by_session.get(session)
         if instances:
             return instances[0]
-        all_instances = self.all_instances()
-        if len(all_instances) == 1:
-            return all_instances[0]
+        all_inst = list(self._by_agent_id.values())
+        if len(all_inst) == 1:
+            return all_inst[0]
         if session == "default" and self._by_session:
             return next(iter(self._by_session.values()))[0]
         return None
 
+    def replace(self, new_instance: AgentInstance) -> bool:
+        """Replace the instance with the same agent_id. Returns True if found."""
+        old = self._by_agent_id.get(new_instance.agent_id)
+        if old is None:
+            return False
+        session_list = self._by_session.get(old.session, [])
+        for i, inst in enumerate(session_list):
+            if inst.agent_id == old.agent_id:
+                session_list[i] = new_instance
+                break
+        self._by_agent_id[new_instance.agent_id] = new_instance
+        return True
+
+    def replace_agent(self, old_agent_id: str, new_instance: AgentInstance) -> bool:
+        """
+        Replace the instance identified by old_agent_id with new_instance.
+        new_instance may have a different agent_id (used when switching personas).
+        """
+        old = self._by_agent_id.get(old_agent_id)
+        if old is None:
+            return False
+        session_list = self._by_session.get(old.session, [])
+        for i, inst in enumerate(session_list):
+            if inst.agent_id == old_agent_id:
+                session_list[i] = new_instance
+                break
+        del self._by_agent_id[old_agent_id]
+        self._by_agent_id[new_instance.agent_id] = new_instance
+        return True
+
+    def remove(self, agent_id: str) -> bool:
+        """Remove an agent from the registry. Returns True if found."""
+        inst = self._by_agent_id.pop(agent_id, None)
+        if inst is None:
+            return False
+        session_list = self._by_session.get(inst.session, [])
+        self._by_session[inst.session] = [i for i in session_list if i.agent_id != agent_id]
+        if not self._by_session[inst.session]:
+            del self._by_session[inst.session]
+        return True
+
     def all_instances(self) -> list[AgentInstance]:
-        """Return all registered agent instances (in registration order)."""
-        return [inst for instances in self._by_session.values() for inst in instances]
+        """Return all registered agent instances."""
+        return list(self._by_agent_id.values())
 
     def __len__(self) -> int:
-        return sum(len(v) for v in self._by_session.values())
+        return len(self._by_agent_id)

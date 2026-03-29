@@ -209,42 +209,67 @@ class QdrantAdapter:
         k: int = 4,
         agent_id: str = "",
     ) -> list[str]:
-        """Return K relevant text chunks from the RAG collection."""
+        """Return K relevant text chunks from the RAG collection.
+
+        The rules collection is already scoped per agent by name (e.g. mab_rules),
+        so agent_id filtering is only applied when chunks have that field.
+        Falls back to an unfiltered search so chunks ingested via the CRM UI
+        (which store doc_name/text without agent_id) are also retrieved.
+        """
         try:
             vector = await get_embedding(text=query, model=self._embedding_model)
         except Exception:
             logger.exception("Embedding failed for business rules query")
             return []
 
-        search_filter: Optional[Filter] = None
+        def _extract_chunks(results) -> list[str]:
+            chunks: list[str] = []
+            for hit in results:
+                payload = hit.payload or {}
+                text = payload.get("content") or payload.get("text") or ""
+                if text:
+                    chunks.append(text)
+            return chunks
+
+        # First try: filter by agent_id (chunks stored by the agent's own ingest pipeline)
         if agent_id:
-            search_filter = Filter(
+            agent_filter = Filter(
                 must=[FieldCondition(key="agent_id", match=MatchValue(value=agent_id))]
             )
+            try:
+                results = await self._client.search(
+                    collection_name=self._rules_collection,
+                    query_vector=vector,
+                    query_filter=agent_filter,
+                    limit=k,
+                    with_payload=True,
+                )
+                chunks = _extract_chunks(results)
+                if chunks:
+                    return chunks
+            except Exception:
+                logger.exception(
+                    "Qdrant filtered search failed for rules collection=%s agent_id=%s",
+                    self._rules_collection,
+                    agent_id,
+                )
 
+        # Fallback: no filter — catches chunks ingested via CRM UI (doc_name/text schema)
         try:
             results = await self._client.search(
                 collection_name=self._rules_collection,
                 query_vector=vector,
-                query_filter=search_filter,
                 limit=k,
                 with_payload=True,
             )
         except Exception:
             logger.exception(
-                "Qdrant search failed for rules collection=%s agent_id=%s",
+                "Qdrant unfiltered search failed for rules collection=%s",
                 self._rules_collection,
-                agent_id,
             )
             return []
 
-        chunks: list[str] = []
-        for hit in results:
-            payload = hit.payload or {}
-            text = payload.get("content") or payload.get("text") or ""
-            if text:
-                chunks.append(text)
-        return chunks
+        return _extract_chunks(results)
 
     # ------------------------------------------------------------------
     # Upsert for RAG ingestion (used by ingest script)

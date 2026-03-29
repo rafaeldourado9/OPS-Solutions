@@ -1,20 +1,20 @@
 /**
- * WhatsApp Gateway — Custom gateway using Baileys.
+ * WhatsApp Gateway — Multi-session gateway using Baileys.
  *
- * Drop-in replacement for WAHA with full media support (audio, video, images, documents).
- * Exposes the same REST API endpoints so the Python agent framework works without changes.
+ * Drop-in replacement for WAHA with full media support.
+ * Supports multiple WhatsApp sessions managed via REST API.
  *
  * Environment variables:
  *   WEBHOOK_URL    — URL to POST incoming messages (default: http://localhost:8000/webhook)
  *   PORT           — HTTP server port (default: 3000)
- *   SESSION_NAME   — WhatsApp session name (default: "default")
+ *   SESSION_NAME   — Default session name (default: "default")
  *   AUTH_DIR       — Directory to persist auth state (default: ./auth)
  *   API_KEY        — Optional API key for X-Api-Key header validation
  */
 
 const express = require("express");
 const pino = require("pino");
-const { createWhatsAppClient } = require("./whatsapp");
+const { SessionManager } = require("./sessionManager");
 const { createRoutes } = require("./routes");
 
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
@@ -41,25 +41,28 @@ async function main() {
     });
   }
 
-  // Create WhatsApp client
-  const wa = await createWhatsAppClient({
-    sessionName: SESSION_NAME,
+  // Create session manager and boot default session
+  const sm = new SessionManager({
     authDir: AUTH_DIR,
     webhookUrl: WEBHOOK_URL,
     logger,
   });
 
-  // Mount WAHA-compatible routes
-  const routes = createRoutes(wa, logger);
+  await sm.createSession(SESSION_NAME);
+
+  // Mount routes (pass session manager instead of single client)
+  const routes = createRoutes(sm, logger);
   app.use("/api", routes);
 
-  // Health check
+  // Health check — reports status of all sessions
   app.get("/health", (req, res) => {
-    const status = wa.getStatus();
+    const sessions = sm.listSessions();
+    const anyConnected = sessions.some((s) => s.connected);
     res.json({
-      status: status.connected ? "ok" : "connecting",
-      session: SESSION_NAME,
-      phone: status.phone || null,
+      status: anyConnected ? "ok" : "connecting",
+      sessions,
+      session: SESSION_NAME, // backwards compat
+      phone: sessions.find((s) => s.connected)?.phone || null,
       uptime: process.uptime(),
     });
   });
@@ -67,7 +70,7 @@ async function main() {
   app.listen(PORT, () => {
     logger.info(`WhatsApp Gateway running on port ${PORT}`);
     logger.info(`Webhook URL: ${WEBHOOK_URL}`);
-    logger.info(`Session: ${SESSION_NAME}`);
+    logger.info(`Default session: ${SESSION_NAME}`);
   });
 }
 

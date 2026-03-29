@@ -32,6 +32,9 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir --no-deps \
+       "git+https://github.com/myshell-ai/OpenVoice.git" \
+       "git+https://github.com/myshell-ai/MeloTTS.git" \
     && playwright install chromium \
     && chmod -R o+rx /opt/playwright-browsers
 

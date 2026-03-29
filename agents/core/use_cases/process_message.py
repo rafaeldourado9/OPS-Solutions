@@ -382,6 +382,7 @@ class ProcessMessageUseCase:
         self._media = media
         self._calendar = calendar
         self._web_tools = web_tools
+        self._tts_voice_idx: int = 0  # alternates between tts_voices entries
 
     # ------------------------------------------------------------------
     # Public API
@@ -393,6 +394,7 @@ class ProcessMessageUseCase:
         chat_id: str,
         user_texts: list[str],
         task_id: Optional[str] = None,
+        push_name: str = "",
     ) -> None:
         """
         Process a list of user messages and send the agent's reply.
@@ -439,13 +441,13 @@ class ProcessMessageUseCase:
                 agent_id=agent_id,
                 chat_id=chat_id,
                 event_type="new_contact",
-                data={},
+                data={"push_name": push_name},
             )
         await self._push_crm_event(
             agent_id=agent_id,
             chat_id=chat_id,
             event_type="message_received",
-            data={"messages": user_texts, "count": len(user_texts)},
+            data={"messages": user_texts, "count": len(user_texts), "push_name": push_name},
         )
 
         # 3. Build message list for LLM
@@ -592,8 +594,14 @@ class ProcessMessageUseCase:
         if use_tts:
             # Split into bigger, didactic audio chunks (not tiny text bubbles)
             audio_parts = split_response_for_audio(response_text, max_chars=2000)
+            # Pick voice: alternate between tts_voices if configured, else use tts_voice
+            if media_cfg.tts_voices:
+                voice = media_cfg.tts_voices[self._tts_voice_idx % len(media_cfg.tts_voices)]
+                self._tts_voice_idx += 1
+            else:
+                voice = media_cfg.tts_voice
             tts_sent = await self._send_as_audio_parts(
-                chat_id, audio_parts, media_cfg.tts_voice, task_id,
+                chat_id, audio_parts, voice, task_id,
             )
             if tts_sent:
                 # Save and return — skip text sending
@@ -661,7 +669,15 @@ class ProcessMessageUseCase:
     ) -> str:
         """Assemble the full system prompt from persona + grounding context."""
         cfg = self._config
-        parts = [cfg.agent.persona.strip()]
+
+        # Always anchor identity first — agent must know its own name and company
+        identity_parts = [f"Seu nome é {cfg.agent.name}."]
+        if cfg.agent.company:
+            identity_parts.append(f"Você trabalha para {cfg.agent.company}.")
+        identity_line = " ".join(identity_parts)
+
+        persona_text = cfg.agent.persona.strip()
+        parts = [f"{identity_line}\n\n{persona_text}" if persona_text else identity_line]
 
         if cfg.anti_hallucination.grounding_enabled:
             business_ctx = context.format_business_rules()
@@ -716,6 +732,10 @@ class ProcessMessageUseCase:
                 "NUNCA escreva \\n como texto literal - use quebra de linha de verdade.",
                 "SEMPRE termine suas frases. Nunca pare no meio de uma ideia.",
                 "Pode usar vários parágrafos quando precisar explicar algo.",
+                "PROIBIDO usar qualquer formatação Markdown: sem **, *, __, #, >, -, numeração com ponto.",
+                "Escreva texto puro, sem negrito, itálico, títulos ou listas formatadas.",
+                "Se precisar listar itens, use vírgula ou escreva em prosa normal.",
+                "Se o usuário mandou só uma saudação ou mensagem muito curta, responda brevemente e AGUARDE ele continuar — não faça perguntas em cascata nem ofereça serviços antes do cliente se abrir.",
             ]
 
         parts += [
@@ -782,24 +802,13 @@ class ProcessMessageUseCase:
         ]):
             return False
 
-        # Base chance from config (tts_chance), but modulated by context
-        base_chance = media_cfg.tts_chance
-
-        # Longer responses → more likely to be audio (explanations are better spoken)
-        if resp_len > 300:
-            base_chance = min(1.0, base_chance + 0.2)
-        if resp_len > 600:
-            base_chance = min(1.0, base_chance + 0.1)
-
-        # Short-ish responses (< 100 chars) → less likely as audio
-        if resp_len < 100:
-            base_chance = max(0.0, base_chance - 0.4)
-
-        # If user sent audio (detected by context marker), respond with audio more often
-        if "[contexto: mensagem de voz]" in user_query.lower():
-            base_chance = min(1.0, base_chance + 0.3)
-
-        return random.random() < base_chance
+        # Frequency is exactly what the slider says — no modulation
+        chance = media_cfg.tts_chance
+        if chance <= 0:
+            return False
+        if chance >= 1:
+            return True
+        return random.random() < chance
 
     async def _generate(
         self,
