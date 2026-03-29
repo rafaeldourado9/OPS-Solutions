@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapters.inbound.api.dependencies import (
     get_conversation_messages_uc,
@@ -12,6 +13,7 @@ from adapters.inbound.api.dependencies import (
     get_start_takeover_uc,
 )
 from adapters.inbound.api.middleware.auth import CurrentUser, get_current_user
+from adapters.outbound.persistence.database import get_session
 from core.use_cases.conversations.end_takeover import EndTakeoverUseCase
 from core.use_cases.conversations.get_conversation_messages import GetConversationMessagesUseCase
 from core.use_cases.conversations.list_conversations import ListConversationsUseCase
@@ -239,14 +241,29 @@ async def send_operator_message(
     agent_id: Optional[str] = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
     uc: SendOperatorMessageUseCase = Depends(get_send_operator_message_uc),
+    db: AsyncSession = Depends(get_session),
 ):
+    # Resolve gateway session from the WhatsApp number linked to this agent
+    from adapters.outbound.persistence.repositories.pg_whatsapp_number_repository import PgWhatsAppNumberRepository
+    number_repo = PgWhatsAppNumberRepository(db)
+    numbers = await number_repo.list_by_tenant(current_user.tenant_id)
+    gateway_session = "default"
+    if numbers:
+        for n in numbers:
+            if agent_id and n.agent_id == agent_id:
+                gateway_session = n.session_name
+                break
+        else:
+            gateway_session = numbers[0].session_name
+
     try:
         msg = await uc.execute(
             tenant_id=current_user.tenant_id,
             chat_id=chat_id,
             operator_id=current_user.user_id,
-            operator_name=current_user.role,  # Will use user name from JWT in real scenario
+            operator_name=current_user.role,
             content=body.content,
+            gateway_session=gateway_session,
             agent_id=agent_id,
         )
     except ValueError as e:
