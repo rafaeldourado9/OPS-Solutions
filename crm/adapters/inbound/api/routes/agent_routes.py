@@ -284,6 +284,19 @@ async def create_instance(
     async def _fire_load():
         try:
             await sync_agent_manifest()
+
+            # If tenant already has a WhatsApp number, bind its session to this agent
+            from adapters.outbound.persistence.repositories.pg_whatsapp_number_repository import PgWhatsAppNumberRepository
+            from adapters.outbound.persistence.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                number_repo = PgWhatsAppNumberRepository(db)
+                numbers = await number_repo.list_by_tenant(current_user.tenant_id)
+                if numbers:
+                    wa_session = numbers[0].session_name
+                    existing_cfg = config_port.read(namespaced_id)
+                    existing_cfg.setdefault("agent", {})["waha_session"] = wa_session
+                    config_port.write(namespaced_id, existing_cfg)
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(f"{settings.agents_api_url}/load/{namespaced_id}")
         except Exception:
