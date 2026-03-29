@@ -1,13 +1,14 @@
 import { api } from './client'
 
-export type PremiseType = 'percentage' | 'fixed'
+export type PremiseType = 'percentage' | 'fixed' | 'multiplier'
 
 export interface Premise {
   id: string
   tenant_id: string
   name: string
   type: PremiseType
-  value: number
+  value: number   // % (0-100) | fixed R$ | multiplier factor (e.g. 2.5)
+  cost: number    // base cost for multiplier type
   is_active: boolean
   description: string
   created_at: string
@@ -18,6 +19,7 @@ export interface CreatePremisePayload {
   name: string
   type: PremiseType
   value: number
+  cost?: number
   description?: string
 }
 

@@ -20,12 +20,16 @@ api.interceptors.request.use(cfg => {
 })
 
 // On 401 → clear auth and redirect to login
+// On 402 → trial expired, redirect to paywall
 api.interceptors.response.use(
   res => res,
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('ops-auth')
       window.location.href = '/auth/login'
+    }
+    if (err.response?.status === 402 && err.response?.data?.detail === 'trial_expired') {
+      window.location.href = '/app/trial-expired'
     }
     return Promise.reject(err)
   }
