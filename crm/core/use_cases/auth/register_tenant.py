@@ -30,7 +30,7 @@ class RegisterTenantUseCase:
             slug=request.tenant_slug,
             name=request.tenant_name,
             agent_id=request.agent_id,
-            owned_agents=[request.agent_id],
+            owned_agents=[],
         )
         await self._tenant_repo.save(tenant)
 

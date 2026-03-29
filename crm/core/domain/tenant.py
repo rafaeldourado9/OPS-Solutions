@@ -43,9 +43,7 @@ class Tenant:
 
     def get_owned_agents(self) -> list[str]:
         """Returns the list of agent IDs owned by this tenant."""
-        if self.owned_agents:
-            return list(self.owned_agents)
-        return [self.agent_id]
+        return list(self.owned_agents)
 
     @property
     def is_trial_active(self) -> bool:
@@ -84,7 +82,7 @@ class Tenant:
             agent_id=agent_id,
             gateway_session=gateway_session,
             gateway_url=gateway_url,
-            owned_agents=owned_agents or [agent_id],
+            owned_agents=owned_agents if owned_agents is not None else [],
             trial_ends_at=now + timedelta(days=14),
             created_at=now,
             updated_at=now,
