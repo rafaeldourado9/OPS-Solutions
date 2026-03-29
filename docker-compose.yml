@@ -8,7 +8,6 @@ volumes:
   redis-data:
   qdrant-data:
   agents-postgres-data:
-  ollama-data:
   gateway-auth:
   # CRM
   crm-postgres-data:
@@ -52,7 +51,7 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/6333"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -82,7 +81,7 @@ services:
     container_name: gateway
     restart: unless-stopped
     environment:
-      WEBHOOK_URL: ${WEBHOOK_URL:-http://agent:8000/webhook}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://crm-api:8001/api/v1/webhooks/gateway-proxy}
       PORT: "3000"
       SESSION_NAME: ${SESSION_NAME:-default}
       API_KEY: ${WAHA_API_KEY:-adminops}
@@ -95,51 +94,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/3000"]
       interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-      - ./agents/scripts/download_models.sh:/download_models.sh:ro
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - OLLAMA_MAX_LOADED_MODELS=1
-      - OLLAMA_NUM_PARALLEL=1
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        ollama serve &
-        OLLAMA_PID=$$!
-        echo "Aguardando Ollama iniciar..."
-        sleep 10
-        echo "Baixando modelos..."
-        ollama pull llama3.1:8b || true
-        ollama pull nomic-embed-text || true
-        echo "Modelos baixados!"
-        wait $$OLLAMA_PID
 
   agent:
     build: ./agents
@@ -148,14 +107,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - AGENT_IDS=${AGENT_IDS:-ops_solutions,maya,snowden}
+      - AGENT_IDS=${AGENT_IDS:-auto}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@agents-postgres:5432/whatsapp_agent
       - WAHA_URL=http://gateway:3000
       - WAHA_API_KEY=${WAHA_API_KEY:-adminops}
-      - OLLAMA_URL=http://ollama:11434
+      - CRM_WEBHOOK_URL=http://crm-api:8001/api/v1/webhooks/agent-events
       - LOG_LEVEL=INFO
       - LOG_JSON=false
     volumes:
@@ -168,8 +127,6 @@ services:
       agents-postgres:
         condition: service_healthy
       gateway:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
@@ -242,7 +199,7 @@ services:
       - AGENTS_API_URL=http://agent:8000
       - AGENTS_DIR=/app/shared-agents
       - GATEWAY_URL=http://gateway:3000
-      - GATEWAY_API_KEY=${GATEWAY_API_KEY:-}
+      - GATEWAY_API_KEY=${GATEWAY_API_KEY:-adminops}
       - MINIO_URL=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
@@ -253,7 +210,13 @@ services:
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_TLS=${SMTP_TLS:-true}
       - EMAIL_FROM=${EMAIL_FROM:-OPS Solutions <suporte@ops.solutions.com>}
+      - APP_URL=${APP_URL:-https://www.solutionsops.com.br}
+      - MERCADOPAGO_ACCESS_TOKEN=${MERCADOPAGO_ACCESS_TOKEN:-}
+      - MERCADOPAGO_WEBHOOK_SECRET=${MERCADOPAGO_WEBHOOK_SECRET:-}
+      - MP_STARTER_PRICE=${MP_STARTER_PRICE:-297.0}
+      - MP_PRO_PRICE=${MP_PRO_PRICE:-497.0}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./agents/agents:/app/shared-agents:rw
