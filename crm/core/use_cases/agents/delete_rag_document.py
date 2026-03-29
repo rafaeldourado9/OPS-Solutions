@@ -10,6 +10,7 @@ from core.ports.outbound.tenant_repository import TenantRepositoryPort
 class DeleteRagDocumentRequest:
     tenant_id: UUID
     doc_name: str
+    agent_id: str | None = None  # target agent; defaults to tenant's active agent
 
 
 class DeleteRagDocumentUseCase:
@@ -29,9 +30,10 @@ class DeleteRagDocumentUseCase:
         if not tenant:
             raise ValueError("Tenant not found")
 
-        config = self._config_port.read(tenant.agent_id)
+        target = request.agent_id or tenant.agent_id
+        config = self._config_port.read(target)
         collection = config.get("memory", {}).get(
-            "qdrant_rag_collection", f"{tenant.agent_id}_rules"
+            "qdrant_rag_collection", f"{target}_rules"
         )
 
         deleted = await self._rag_port.delete_document(collection, request.doc_name)

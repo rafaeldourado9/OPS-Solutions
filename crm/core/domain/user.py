@@ -22,6 +22,7 @@ class User:
     name: str
     role: Role = Role.OPERATOR
     is_active: bool = True
+    avatar_url: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.utcnow())
 
     @staticmethod

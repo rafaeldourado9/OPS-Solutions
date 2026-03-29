@@ -71,6 +71,7 @@ class UploadRagDocumentRequest:
     filename: str
     content: bytes
     doc_name: str = ""  # optional custom name; defaults to filename without extension
+    agent_id: str | None = None  # target agent; defaults to tenant's active agent
 
 
 class UploadRagDocumentUseCase:
@@ -90,9 +91,10 @@ class UploadRagDocumentUseCase:
         if not tenant:
             raise ValueError("Tenant not found")
 
-        config = self._config_port.read(tenant.agent_id)
+        target = request.agent_id or tenant.agent_id
+        config = self._config_port.read(target)
         collection = config.get("memory", {}).get(
-            "qdrant_rag_collection", f"{tenant.agent_id}_rules"
+            "qdrant_rag_collection", f"{target}_rules"
         )
 
         name = request.doc_name or request.filename.rsplit(".", 1)[0]

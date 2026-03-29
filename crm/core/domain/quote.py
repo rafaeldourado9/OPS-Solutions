@@ -74,6 +74,7 @@ class Quote:
     notes: str = ""
     valid_until: Optional[datetime] = None
     currency: str = "BRL"
+    sale_price: Optional[float] = None  # manual override for final selling price
     created_at: datetime = field(default_factory=lambda: datetime.utcnow())
     updated_at: datetime = field(default_factory=lambda: datetime.utcnow())
 
@@ -87,6 +88,8 @@ class Quote:
 
     @property
     def total(self) -> float:
+        if self.sale_price is not None:
+            return self.sale_price
         return self.items_total + self.premises_total
 
     @staticmethod
@@ -114,16 +117,40 @@ class Quote:
             updated_at=now,
         )
 
-    def apply_premises(self, premises: list[Premise]) -> None:
-        """Recalculates applied_premises based on current items_total."""
-        base = self.items_total
+    def apply_premises(
+        self,
+        premises: list[Premise],
+        sale_price_override: Optional[float] = None,
+    ) -> None:
+        """Recalculates applied_premises using contribution-margin method.
+
+        Percentage premises are % of the final selling price (not of cost).
+        Formula: selling_price = (items_cost + fixed + multiplier) / (1 - sum_pct)
+
+        If sale_price_override is provided, premises are shown as % of that value.
+        """
+        from core.domain.premise import PremiseType
+
+        sum_pct = sum(p.value / 100 for p in premises if p.type == PremiseType.PERCENTAGE)
+        sum_fixed = sum(p.value for p in premises if p.type == PremiseType.FIXED)
+        sum_mult = sum((p.cost or 0.0) * p.value for p in premises if p.type == PremiseType.MULTIPLIER)
+
+        if sale_price_override is not None:
+            selling_price = sale_price_override
+            self.sale_price = sale_price_override
+        elif sum_pct < 1.0:
+            selling_price = (self.items_total + sum_fixed + sum_mult) / (1.0 - sum_pct)
+        else:
+            selling_price = self.items_total + sum_fixed + sum_mult
+
         self.applied_premises = [
             AppliedPremise(
                 premise_id=p.id,
                 name=p.name,
                 type=p.type.value,
                 value=p.value,
-                amount=p.apply_to(base),
+                amount=(selling_price * p.value / 100) if p.type == PremiseType.PERCENTAGE
+                else ((p.cost or 0.0) * p.value if p.type == PremiseType.MULTIPLIER else p.value),
             )
             for p in premises
         ]

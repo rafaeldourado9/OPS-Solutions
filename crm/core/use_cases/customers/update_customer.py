@@ -18,6 +18,7 @@ class UpdateCustomerRequest:
     tags: Optional[list[str]] = None
     notes: Optional[str] = None
     address: Optional[dict] = None
+    is_active: Optional[bool] = None
 
 
 class UpdateCustomerUseCase:
@@ -44,6 +45,8 @@ class UpdateCustomerUseCase:
             customer.notes = request.notes
         if request.address is not None:
             customer.address = Address(**request.address)
+        if request.is_active is not None:
+            customer.is_active = request.is_active
 
         customer.updated_at = datetime.utcnow()
         await self._repo.update(customer)

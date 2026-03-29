@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Any, Optional
+from uuid import UUID
 
 import structlog
 
@@ -34,6 +36,7 @@ class HandleGatewayProxyUseCase:
         message_repo: Optional[MessageRepositoryPort] = None,
         tenant_repo: Optional[TenantRepositoryPort] = None,
         notification: Optional[NotificationPort] = None,
+        number_repo: Any = None,  # PgWhatsAppNumberRepository
     ) -> None:
         self._agent_gateway = agent_gateway
         self._cache = cache
@@ -41,6 +44,7 @@ class HandleGatewayProxyUseCase:
         self._message_repo = message_repo
         self._tenant_repo = tenant_repo
         self._notification = notification
+        self._number_repo = number_repo
 
     async def execute(self, payload: dict[str, Any]) -> dict[str, str]:
         # Extract chat_id from gateway payload
@@ -53,13 +57,20 @@ class HandleGatewayProxyUseCase:
             await self._agent_gateway.forward_webhook(payload)
             return {"action": "forwarded", "reason": "no_chat_id"}
 
-        # Check takeover state
+        # Check takeover state — value is "tenant_id:operator_id"
         takeover_key = f"{TAKEOVER_KEY_PREFIX}{session}:{chat_id}"
-        is_takeover = await self._cache.exists(takeover_key)
+        takeover_value = await self._cache.get(takeover_key)
 
-        if is_takeover:
+        if takeover_value:
             logger.info("gateway_proxy_takeover_active", chat_id=chat_id, session=session)
-            await self._store_intercepted_message(chat_id, session, msg_payload)
+            # Parse tenant_id encoded in value (format: "tenant_id:operator_id")
+            tenant_id_str = takeover_value.split(":")[0]
+            try:
+                tenant_id = UUID(tenant_id_str)
+            except ValueError:
+                # Legacy value format (just operator_id) — fall back to session lookup
+                tenant_id = None
+            await self._store_intercepted_message(chat_id, session, msg_payload, tenant_id)
             return {"action": "intercepted", "reason": "takeover_active"}
 
         # No takeover: forward to agents
@@ -68,27 +79,39 @@ class HandleGatewayProxyUseCase:
         return {"action": "forwarded", "reason": "no_takeover"}
 
     async def _store_intercepted_message(
-        self, chat_id: str, session: str, msg_payload: dict,
+        self,
+        chat_id: str,
+        session: str,
+        msg_payload: dict,
+        tenant_id: Optional[UUID] = None,
     ) -> None:
         """Store intercepted message so operator sees it in real-time."""
         if not (self._conversation_repo and self._message_repo and self._tenant_repo):
             return
 
-        # Resolve tenant by gateway session
-        tenant = await self._tenant_repo.get_by_gateway_session(session)
+        # Resolve tenant — prefer tenant_id from Redis, fall back to agent_id lookup
+        tenant = None
+        if tenant_id:
+            tenant = await self._tenant_repo.get_by_id(tenant_id)
         if not tenant:
-            # Fallback: try to find conversation by chat_id across tenants
-            logger.warning("tenant_not_found_for_session", session=session)
+            tenant = await self._tenant_repo.get_by_agent_id(session)
+        if not tenant:
+            logger.warning("tenant_not_found_for_takeover", session=session, chat_id=chat_id)
             return
 
-        conversation = await self._conversation_repo.get_by_chat_id(tenant.id, chat_id)
+        # Determine agent_id: prefer number-specific agent, fall back to tenant default
+        active_agent_id = tenant.get_active_agent_id()
+        if self._number_repo:
+            number = await self._number_repo.get_by_session(session)
+            if number and number.agent_id:
+                active_agent_id = number.agent_id
+        conversation = await self._conversation_repo.get_by_chat_id(tenant.id, chat_id, agent_id=active_agent_id)
         if not conversation:
-            # Conversation should exist if takeover is active, but create if missing
             phone = chat_id.split("@")[0] if "@" in chat_id else chat_id
             conversation = Conversation.create(
                 tenant_id=tenant.id,
                 chat_id=chat_id,
-                agent_id=tenant.agent_id,
+                agent_id=active_agent_id,
                 customer_phone=phone,
             )
             await self._conversation_repo.save(conversation)
@@ -112,8 +135,6 @@ class HandleGatewayProxyUseCase:
         )
         await self._message_repo.save(message)
 
-        # Update conversation
-        from datetime import datetime
         now = datetime.utcnow()
         conversation.last_message_preview = content[:100]
         conversation.last_message_at = now
@@ -121,13 +142,13 @@ class HandleGatewayProxyUseCase:
         conversation.updated_at = now
         await self._conversation_repo.update(conversation)
 
-        # Push to WebSocket
         if self._notification:
             await self._notification.push_to_tenant(
                 tenant.id,
                 "new_message",
                 {
                     "chat_id": chat_id,
+                    "agent_id": active_agent_id,
                     "conversation_id": str(conversation.id),
                     "message": {
                         "id": str(message.id),

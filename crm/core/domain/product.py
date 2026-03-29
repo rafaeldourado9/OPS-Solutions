@@ -54,10 +54,10 @@ class Product:
     name: str
     sku: str
     unit: str           # un, m, kg, L, etc.
-    price: float        # sale price
-    cost: float         # purchase cost
-    stock_quantity: float
-    min_stock_alert: float  # alert threshold
+    price: Optional[float] = None   # sale price (optional)
+    cost: Optional[float] = None    # purchase cost (optional)
+    stock_quantity: float = 0.0
+    min_stock_alert: float = 0.0    # alert threshold
     description: str = ""
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.utcnow())
@@ -69,8 +69,8 @@ class Product:
         name: str,
         sku: str,
         unit: str = "un",
-        price: float = 0.0,
-        cost: float = 0.0,
+        price: Optional[float] = None,
+        cost: Optional[float] = None,
         stock_quantity: float = 0.0,
         min_stock_alert: float = 0.0,
         description: str = "",

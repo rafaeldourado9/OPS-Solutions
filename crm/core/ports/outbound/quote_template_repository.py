@@ -18,3 +18,8 @@ class QuoteTemplateRepositoryPort(ABC):
 
     @abstractmethod
     async def delete(self, tenant_id: UUID, template_id: UUID) -> bool: ...
+
+    @abstractmethod
+    async def update_mapping(
+        self, tenant_id: UUID, template_id: UUID, field_mapping: dict[str, str]
+    ) -> Optional[QuoteTemplate]: ...

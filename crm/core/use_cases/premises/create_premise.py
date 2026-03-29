@@ -9,8 +9,9 @@ from core.ports.outbound.premise_repository import PremiseRepositoryPort
 class CreatePremiseRequest:
     tenant_id: UUID
     name: str
-    type: str  # "percentage" or "fixed"
+    type: str  # "percentage" | "fixed" | "multiplier"
     value: float
+    cost: float = 0.0
     description: str = ""
 
 
@@ -25,6 +26,7 @@ class CreatePremiseUseCase:
             name=request.name,
             type=PremiseType(request.type),
             value=request.value,
+            cost=request.cost,
             description=request.description,
         )
         await self._repo.save(premise)

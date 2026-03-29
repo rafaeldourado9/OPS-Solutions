@@ -35,8 +35,9 @@ class SendOperatorMessageUseCase:
         operator_name: str,
         content: str,
         gateway_session: str = "default",
+        agent_id: str | None = None,
     ) -> CRMMessage:
-        conversation = await self._conversation_repo.get_by_chat_id(tenant_id, chat_id)
+        conversation = await self._conversation_repo.get_by_chat_id(tenant_id, chat_id, agent_id=agent_id)
         if not conversation:
             raise ValueError("Conversation not found")
 
@@ -70,6 +71,7 @@ class SendOperatorMessageUseCase:
             "new_message",
             {
                 "chat_id": chat_id,
+                "agent_id": conversation.agent_id,
                 "conversation_id": str(conversation.id),
                 "message": {
                     "id": str(message.id),

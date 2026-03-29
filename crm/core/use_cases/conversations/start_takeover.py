@@ -28,8 +28,9 @@ class StartTakeoverUseCase:
 
     async def execute(
         self, tenant_id: UUID, chat_id: str, operator_id: UUID, gateway_session: str = "default",
+        agent_id: str | None = None,
     ) -> None:
-        conversation = await self._conversation_repo.get_by_chat_id(tenant_id, chat_id)
+        conversation = await self._conversation_repo.get_by_chat_id(tenant_id, chat_id, agent_id=agent_id)
         if not conversation:
             raise ValueError("Conversation not found")
 
@@ -37,8 +38,13 @@ class StartTakeoverUseCase:
             raise ValueError("Takeover already active")
 
         # Set Redis key so gateway proxy intercepts messages
+        # Value encodes "tenant_id:operator_id" so proxy can look up tenant without a DB query
         takeover_key = f"{TAKEOVER_KEY_PREFIX}{gateway_session}:{chat_id}"
-        await self._cache.set(takeover_key, str(operator_id), ttl_seconds=TAKEOVER_TTL_SECONDS)
+        await self._cache.set(
+            takeover_key,
+            f"{tenant_id}:{operator_id}",
+            ttl_seconds=TAKEOVER_TTL_SECONDS,
+        )
 
         # Update conversation
         now = datetime.utcnow()

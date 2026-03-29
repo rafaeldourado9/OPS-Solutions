@@ -17,3 +17,18 @@ class AgentConfigPort(ABC):
     def exists(self, agent_id: str) -> bool:
         """Returns True if business.yml exists for agent_id."""
         ...
+
+    @abstractmethod
+    def list_agents(self) -> list[str]:
+        """Returns sorted list of agent_ids that have a business.yml."""
+        ...
+
+    @abstractmethod
+    def create_agent(self, agent_id: str, template_id: str = "template") -> None:
+        """Creates a new agent directory by copying from template."""
+        ...
+
+    @abstractmethod
+    def delete_agent(self, agent_id: str) -> None:
+        """Deletes the agent directory entirely."""
+        ...

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from core.ports.outbound.dashboard_repository import ConversationMetrics, DashboardRepositoryPort
@@ -17,5 +17,5 @@ class GetConversationMetricsUseCase:
         self._repo = repo
 
     async def execute(self, req: GetConversationMetricsRequest) -> ConversationMetrics:
-        since = datetime.now(timezone.utc) - timedelta(days=req.days)
+        since = datetime.utcnow() - timedelta(days=req.days)
         return await self._repo.get_conversation_metrics(req.tenant_id, since)

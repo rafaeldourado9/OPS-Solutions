@@ -37,12 +37,14 @@ class UpdateAgentConfigUseCase:
         if not tenant:
             raise ValueError("Tenant not found")
 
-        if not self._config_port.exists(tenant.agent_id):
+        active_id = tenant.get_active_agent_id()
+
+        if not self._config_port.exists(active_id):
             raise FileNotFoundError(
-                f"business.yml not found for agent '{tenant.agent_id}'"
+                f"business.yml not found for agent '{active_id}'"
             )
 
-        current = self._config_port.read(tenant.agent_id)
+        current = self._config_port.read(active_id)
         updated = _deep_merge(current, request.updates)
-        self._config_port.write(tenant.agent_id, updated)
+        self._config_port.write(active_id, updated)
         return updated

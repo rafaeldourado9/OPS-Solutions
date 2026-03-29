@@ -25,6 +25,9 @@ class SyncCustomerFromAgentEventUseCase:
 
         tenant = await self._tenant_repo.get_by_agent_id(event.agent_id)
         if not tenant:
+            # Fallback for single-tenant deployments where agent_id may differ from tenant slug
+            tenant = await self._tenant_repo.get_by_gateway_session("default")
+        if not tenant:
             logger.warning("tenant_not_found_for_agent", agent_id=event.agent_id)
             return None
 
@@ -36,7 +39,7 @@ class SyncCustomerFromAgentEventUseCase:
             logger.debug("customer_already_exists", phone=phone)
             return existing
 
-        name = event.data.get("name") or event.data.get("pushName") or phone
+        name = event.data.get("name") or event.data.get("pushName") or event.data.get("push_name") or phone
         customer = Customer.create(
             tenant_id=tenant.id,
             name=name,

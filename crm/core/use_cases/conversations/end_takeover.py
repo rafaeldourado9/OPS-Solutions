@@ -27,8 +27,9 @@ class EndTakeoverUseCase:
 
     async def execute(
         self, tenant_id: UUID, chat_id: str, gateway_session: str = "default",
+        agent_id: str | None = None,
     ) -> None:
-        conversation = await self._conversation_repo.get_by_chat_id(tenant_id, chat_id)
+        conversation = await self._conversation_repo.get_by_chat_id(tenant_id, chat_id, agent_id=agent_id)
         if not conversation:
             raise ValueError("Conversation not found")
 

@@ -14,6 +14,7 @@ class UpdatePremiseRequest:
     name: Optional[str] = None
     type: Optional[str] = None
     value: Optional[float] = None
+    cost: Optional[float] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -34,6 +35,8 @@ class UpdatePremiseUseCase:
             premise.type = PremiseType(request.type)
         if request.value is not None:
             premise.value = request.value
+        if request.cost is not None:
+            premise.cost = request.cost
         if request.description is not None:
             premise.description = request.description
         if request.is_active is not None:

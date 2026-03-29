@@ -19,9 +19,10 @@ class GetAgentConfigUseCase:
         if not tenant:
             raise ValueError("Tenant not found")
 
-        if not self._config_port.exists(tenant.agent_id):
-            raise FileNotFoundError(
-                f"business.yml not found for agent '{tenant.agent_id}'"
-            )
+        active_id = tenant.get_active_agent_id()
 
-        return self._config_port.read(tenant.agent_id)
+        if not self._config_port.exists(active_id):
+            # Auto-create default config so the UI always has something to edit
+            self._config_port.create_agent(active_id)
+
+        return self._config_port.read(active_id)

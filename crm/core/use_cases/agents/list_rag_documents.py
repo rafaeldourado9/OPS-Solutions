@@ -18,13 +18,14 @@ class ListRagDocumentsUseCase:
         self._config_port = config_port
         self._rag_port = rag_port
 
-    async def execute(self, tenant_id: UUID) -> list[RagDocument]:
+    async def execute(self, tenant_id: UUID, agent_id: str | None = None) -> list[RagDocument]:
         tenant = await self._tenant_repo.get_by_id(tenant_id)
         if not tenant:
             raise ValueError("Tenant not found")
 
-        config = self._config_port.read(tenant.agent_id)
+        target = agent_id or tenant.agent_id
+        config = self._config_port.read(target)
         collection = config.get("memory", {}).get(
-            "qdrant_rag_collection", f"{tenant.agent_id}_rules"
+            "qdrant_rag_collection", f"{target}_rules"
         )
         return await self._rag_port.list_documents(collection)
