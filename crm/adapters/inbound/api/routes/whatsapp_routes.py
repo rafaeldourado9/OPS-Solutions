@@ -4,6 +4,8 @@ WhatsApp Numbers API — manage multiple WhatsApp numbers per tenant.
 Each number maps to a gateway session and optionally to a specific agent.
 """
 
+import asyncio
+import os
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,6 +22,26 @@ from core.domain.whatsapp_number import WhatsAppNumber
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/v1/whatsapp", tags=["whatsapp"])
+
+
+async def _sync_agent_session(agent_id: str, session_name: str) -> None:
+    """Write waha_session into business.yml and reload the agent process."""
+    try:
+        import httpx
+        from adapters.outbound.agents.filesystem_agent_config import FilesystemAgentConfig
+        from infrastructure.config import settings
+
+        agents_dir = os.environ.get("AGENTS_DIR", "/app/shared-agents")
+        config_port = FilesystemAgentConfig(agents_dir)
+        if config_port.exists(agent_id):
+            cfg = config_port.read(agent_id)
+            cfg.setdefault("agent", {})["waha_session"] = session_name
+            config_port.write(agent_id, cfg)
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"{settings.agents_api_url}/reload/{agent_id}")
+    except Exception:
+        logger.exception("Failed to sync waha_session for agent=%s session=%s", agent_id, session_name)
 
 
 # --- Schemas ---
@@ -114,6 +136,12 @@ async def add_number(
         agent_id=body.agent_id,
     )
     await repo.save(number)
+
+    # Write waha_session into the agent's business.yml so the agent registry
+    # routes incoming webhooks for this session to the correct agent.
+    effective_agent_id = body.agent_id or tenant.get_active_agent_id()
+    if effective_agent_id:
+        asyncio.create_task(_sync_agent_session(effective_agent_id, session_name))
 
     return {
         "id": str(number.id),
@@ -225,6 +253,9 @@ async def update_number(
         number.agent_id = body.agent_id
 
     await repo.update(number)
+
+    if body.agent_id is not None:
+        asyncio.create_task(_sync_agent_session(body.agent_id, number.session_name))
 
     return {
         "id": str(number.id),
