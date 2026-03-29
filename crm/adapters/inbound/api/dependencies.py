@@ -21,6 +21,7 @@ from adapters.outbound.persistence.repositories.pg_quote_repository import PgQuo
 from adapters.outbound.persistence.repositories.pg_quote_template_repository import PgQuoteTemplateRepository
 from adapters.outbound.persistence.repositories.pg_tenant_repository import PgTenantRepository
 from adapters.outbound.persistence.repositories.pg_user_repository import PgUserRepository
+from adapters.outbound.persistence.repositories.pg_whatsapp_number_repository import PgWhatsAppNumberRepository
 from core.ports.outbound.agent_config_port import AgentConfigPort
 from core.ports.outbound.contract_repository import ContractRepositoryPort
 from core.ports.outbound.conversation_repository import ConversationRepositoryPort
@@ -645,7 +646,6 @@ async def get_generate_contract_uc(
 async def get_whatsapp_number_repo(
     session: AsyncSession = Depends(get_session),
 ) -> PgWhatsAppNumberRepository:
-    from adapters.outbound.persistence.repositories.pg_whatsapp_number_repository import PgWhatsAppNumberRepository
     return PgWhatsAppNumberRepository(session)
 
 

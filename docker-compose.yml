@@ -8,17 +8,17 @@ volumes:
   redis-data:
   qdrant-data:
   agents-postgres-data:
-  gateway-auth:
-  # CRM
+  gateway-auth: # CRM
+
   crm-postgres-data:
   minio-data:
-  rabbitmq-data:
-  # Infra
+  rabbitmq-data: # Infra
+
   nginx-logs:
 
-# =============================================================================
-#  AGENTS
-# =============================================================================
+    # =============================================================================
+    #  AGENTS
+    # =============================================================================
 
 services:
 
@@ -27,15 +27,13 @@ services:
     container_name: redis
     restart: unless-stopped
     command: >
-      redis-server
-      --notify-keyspace-events KEA
-      --appendonly yes
+      redis-server --notify-keyspace-events KEA --appendonly yes
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,7 +49,7 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/6333"]
+      test: [ "CMD", "bash", "-c", "</dev/tcp/localhost/6333" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -70,7 +68,7 @@ services:
     volumes:
       - agents-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_agent"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d whatsapp_agent" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -94,7 +92,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/3000"]
+      test: [ "CMD", "bash", "-c", "</dev/tcp/localhost/3000" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -129,7 +127,7 @@ services:
       gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -152,7 +150,7 @@ services:
     volumes:
       - crm-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -167,7 +165,7 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      test: [ "CMD", "rabbitmq-diagnostics", "check_running" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -250,17 +248,20 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
       - nginx-logs:/var/log/nginx
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       crm-api:
         condition: service_started
       crm-frontend:
         condition: service_started
     healthcheck:
-      test: ["CMD", "nginx", "-t"]
+      test: [ "CMD", "nginx", "-t" ]
       interval: 30s
       timeout: 5s
       retries: 3
