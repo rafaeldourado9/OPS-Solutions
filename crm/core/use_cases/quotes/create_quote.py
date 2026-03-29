@@ -28,6 +28,7 @@ class CreateQuoteRequest:
     currency: str = "BRL"
     items: list[QuoteItemInput] = field(default_factory=list)
     premise_ids: list[UUID] = field(default_factory=list)
+    sale_price: Optional[float] = None
 
 
 class CreateQuoteUseCase:
@@ -67,7 +68,7 @@ class CreateQuoteUseCase:
                 request.tenant_id, active_only=True
             )
             selected = [p for p in all_premises if p.id in request.premise_ids]
-            quote.apply_premises(selected)
+            quote.apply_premises(selected, sale_price_override=request.sale_price)
 
         await self._quote_repo.save(quote)
         return quote
