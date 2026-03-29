@@ -2,19 +2,24 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapters.inbound.api.dependencies import (
     get_add_stock_movement_uc,
     get_create_product_uc,
+    get_generate_stock_report_uc,
     get_list_products_uc,
     get_list_stock_movements_uc,
     get_update_product_uc,
 )
 from adapters.inbound.api.middleware.auth import get_current_user, CurrentUser
+from adapters.outbound.persistence.database import get_session
 from core.domain.product import MovementType, Product, StockMovement
 from core.use_cases.inventory.add_stock_movement import AddStockMovementRequest, AddStockMovementUseCase
 from core.use_cases.inventory.create_product import CreateProductRequest, CreateProductUseCase
+from core.use_cases.inventory.generate_stock_report import GenerateStockReportUseCase
 from core.use_cases.inventory.list_products import ListProductsUseCase
 from core.use_cases.inventory.list_stock_movements import ListStockMovementsUseCase
 from core.use_cases.inventory.update_product import UpdateProductRequest, UpdateProductUseCase
@@ -28,8 +33,8 @@ class ProductCreateBody(BaseModel):
     name: str
     sku: str
     unit: str = "un"
-    price: float = 0.0
-    cost: float = 0.0
+    price: Optional[float] = None
+    cost: Optional[float] = None
     stock_quantity: float = 0.0
     min_stock_alert: float = 0.0
     description: str = ""
@@ -58,8 +63,8 @@ class ProductOut(BaseModel):
     name: str
     sku: str
     unit: str
-    price: float
-    cost: float
+    price: Optional[float] = None
+    cost: Optional[float] = None
     stock_quantity: float
     min_stock_alert: float
     is_low_stock: bool
@@ -163,6 +168,7 @@ async def create_product(
     body: ProductCreateBody,
     current_user: CurrentUser = Depends(get_current_user),
     uc: CreateProductUseCase = Depends(get_create_product_uc),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         product = await uc.execute(CreateProductRequest(
@@ -178,7 +184,43 @@ async def create_product(
         ))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await session.commit()
     return _product_out(product)
+
+
+@router.get("/report/pdf")
+async def generate_stock_report(
+    current_user: CurrentUser = Depends(get_current_user),
+    uc: GenerateStockReportUseCase = Depends(get_generate_stock_report_uc),
+):
+    try:
+        pdf_bytes = await uc.execute(current_user.tenant_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=relatorio-estoque.pdf"},
+    )
+
+
+@router.delete("/{product_id}", status_code=204)
+async def delete_product(
+    product_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    uc: UpdateProductUseCase = Depends(get_update_product_uc),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        await uc.execute(UpdateProductRequest(
+            tenant_id=current_user.tenant_id,
+            product_id=product_id,
+            is_active=False,
+        ))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    await session.commit()
+    return Response(status_code=204)
 
 
 @router.put("/{product_id}", response_model=ProductOut)
@@ -187,6 +229,7 @@ async def update_product(
     body: ProductUpdateBody,
     current_user: CurrentUser = Depends(get_current_user),
     uc: UpdateProductUseCase = Depends(get_update_product_uc),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         product = await uc.execute(UpdateProductRequest(
@@ -202,6 +245,7 @@ async def update_product(
         ))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    await session.commit()
     return _product_out(product)
 
 
@@ -211,6 +255,7 @@ async def add_stock_movement(
     body: StockMovementBody,
     current_user: CurrentUser = Depends(get_current_user),
     uc: AddStockMovementUseCase = Depends(get_add_stock_movement_uc),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         result = await uc.execute(AddStockMovementRequest(
@@ -223,6 +268,7 @@ async def add_stock_movement(
         ))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await session.commit()
     return StockMovementResultOut(
         movement=_movement_out(result.movement),
         new_stock_quantity=result.new_stock_quantity,

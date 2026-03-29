@@ -69,6 +69,7 @@ from core.use_cases.inventory.add_stock_movement import AddStockMovementUseCase
 from core.use_cases.inventory.create_product import CreateProductUseCase
 from core.use_cases.inventory.list_products import ListProductsUseCase
 from core.use_cases.inventory.list_stock_movements import ListStockMovementsUseCase
+from core.use_cases.inventory.generate_stock_report import GenerateStockReportUseCase
 from core.use_cases.inventory.update_product import UpdateProductUseCase
 from core.use_cases.premises.create_premise import CreatePremiseUseCase
 from core.use_cases.premises.delete_premise import DeletePremiseUseCase
@@ -82,7 +83,16 @@ from core.use_cases.quotes.list_quote_templates import ListQuoteTemplatesUseCase
 from core.use_cases.quotes.list_quotes import ListQuotesUseCase
 from core.use_cases.quotes.recalculate_quote import RecalculateQuoteUseCase
 from core.use_cases.quotes.update_quote_status import UpdateQuoteStatusUseCase
+from core.use_cases.quotes.analyze_template_fields import AnalyzeTemplateFieldsUseCase
 from core.use_cases.quotes.upload_quote_template import UploadQuoteTemplateUseCase
+from core.use_cases.quotes.generate_quotes_report import GenerateQuotesReportUseCase
+from core.use_cases.quotes.generate_single_quote_pdf import GenerateSingleQuotePdfUseCase
+from core.use_cases.contracts.upload_contract_template import UploadContractTemplateUseCase
+from core.use_cases.contracts.list_contract_templates import ListContractTemplatesUseCase
+from core.use_cases.contracts.delete_contract_template import DeleteContractTemplateUseCase
+from core.use_cases.contracts.generate_contract import GenerateContractUseCase
+from adapters.outbound.persistence.repositories.pg_contract_template_repository import PgContractTemplateRepository
+from core.ports.outbound.contract_template_repository import ContractTemplateRepositoryPort
 
 
 # --- Repositories ---
@@ -129,11 +139,19 @@ def get_notification(request: Request) -> NotificationPort:
 
 # --- Auth Use Cases ---
 
+def _get_email_adapter():
+    from adapters.outbound.email.smtp_adapter import SmtpEmailAdapter
+    from infrastructure.config import settings
+    if not settings.smtp_user:
+        return None
+    return SmtpEmailAdapter()
+
+
 async def get_register_tenant_uc(
     tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
     user_repo: UserRepositoryPort = Depends(get_user_repo),
 ) -> RegisterTenantUseCase:
-    return RegisterTenantUseCase(tenant_repo, user_repo)
+    return RegisterTenantUseCase(tenant_repo, user_repo, _get_email_adapter())
 
 
 async def get_login_uc(
@@ -373,6 +391,15 @@ def _get_pdf_exporter():
     return LibreOfficePdfExporter()
 
 
+def _get_llm_analyzer():
+    from adapters.outbound.llm.gemini_analyzer_adapter import GeminiAnalyzerAdapter
+    return GeminiAnalyzerAdapter()
+
+
+async def get_analyze_template_fields_uc() -> AnalyzeTemplateFieldsUseCase:
+    return AnalyzeTemplateFieldsUseCase(_get_docx_engine(), _get_llm_analyzer())
+
+
 async def get_upload_quote_template_uc(
     template_repo: QuoteTemplateRepositoryPort = Depends(get_quote_template_repo),
 ) -> UploadQuoteTemplateUseCase:
@@ -394,6 +421,8 @@ async def get_delete_quote_template_uc(
 async def get_generate_quote_document_uc(
     quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
     template_repo: QuoteTemplateRepositoryPort = Depends(get_quote_template_repo),
+    customer_repo: CustomerRepositoryPort = Depends(get_customer_repo),
+    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
 ) -> GenerateQuoteDocumentUseCase:
     return GenerateQuoteDocumentUseCase(
         quote_repo=quote_repo,
@@ -401,7 +430,23 @@ async def get_generate_quote_document_uc(
         storage=_get_storage(),
         docx_engine=_get_docx_engine(),
         pdf_exporter=_get_pdf_exporter(),
+        customer_repo=customer_repo,
+        tenant_repo=tenant_repo,
     )
+
+
+async def get_generate_quotes_report_uc(
+    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
+    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
+) -> GenerateQuotesReportUseCase:
+    return GenerateQuotesReportUseCase(tenant_repo, quote_repo)
+
+
+async def get_generate_single_quote_pdf_uc(
+    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
+    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
+) -> GenerateSingleQuotePdfUseCase:
+    return GenerateSingleQuotePdfUseCase(tenant_repo, quote_repo)
 
 
 # --- Contract Use Cases ---
@@ -475,6 +520,14 @@ async def get_list_stock_movements_uc(
     movement_repo: StockMovementRepositoryPort = Depends(get_stock_movement_repo),
 ) -> ListStockMovementsUseCase:
     return ListStockMovementsUseCase(product_repo, movement_repo)
+
+
+async def get_generate_stock_report_uc(
+    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
+    product_repo: ProductRepositoryPort = Depends(get_product_repo),
+    movement_repo: StockMovementRepositoryPort = Depends(get_stock_movement_repo),
+) -> GenerateStockReportUseCase:
+    return GenerateStockReportUseCase(tenant_repo, product_repo, movement_repo)
 
 
 # --- Agent Config + RAG Use Cases ---
@@ -557,11 +610,51 @@ async def get_inventory_alerts_uc(
     return GetInventoryAlertsUseCase(repo)
 
 
+# --- Contract Template Use Cases ---
+
+async def get_contract_template_repo(
+    session: AsyncSession = Depends(get_session),
+) -> ContractTemplateRepositoryPort:
+    return PgContractTemplateRepository(session)
+
+
+async def get_upload_contract_template_uc(
+    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
+) -> UploadContractTemplateUseCase:
+    return UploadContractTemplateUseCase(template_repo, _get_storage())
+
+
+async def get_list_contract_templates_uc(
+    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
+) -> ListContractTemplatesUseCase:
+    return ListContractTemplatesUseCase(template_repo)
+
+
+async def get_delete_contract_template_uc(
+    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
+) -> DeleteContractTemplateUseCase:
+    return DeleteContractTemplateUseCase(template_repo, _get_storage())
+
+
+async def get_generate_contract_uc(
+    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
+) -> GenerateContractUseCase:
+    return GenerateContractUseCase(template_repo, _get_storage(), _get_docx_engine(), _get_pdf_exporter())
+
+
+async def get_whatsapp_number_repo(
+    session: AsyncSession = Depends(get_session),
+) -> PgWhatsAppNumberRepository:
+    from adapters.outbound.persistence.repositories.pg_whatsapp_number_repository import PgWhatsAppNumberRepository
+    return PgWhatsAppNumberRepository(session)
+
+
 async def get_handle_gateway_proxy_uc(
     conversation_repo: ConversationRepositoryPort = Depends(get_conversation_repo),
     message_repo: MessageRepositoryPort = Depends(get_message_repo),
     tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
     notification: NotificationPort = Depends(get_notification),
+    number_repo: PgWhatsAppNumberRepository = Depends(get_whatsapp_number_repo),
 ) -> HandleGatewayProxyUseCase:
     return HandleGatewayProxyUseCase(
         agent_gateway=_get_agent_gateway(),
@@ -570,4 +663,5 @@ async def get_handle_gateway_proxy_uc(
         message_repo=message_repo,
         tenant_repo=tenant_repo,
         notification=notification,
+        number_repo=number_repo,
     )

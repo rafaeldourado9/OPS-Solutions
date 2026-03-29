@@ -42,6 +42,7 @@ class CustomerUpdateBody(BaseModel):
     tags: Optional[list[str]] = None
     notes: Optional[str] = None
     address: Optional[dict] = None
+    is_active: Optional[bool] = None
 
 
 class CustomerResponse(BaseModel):
@@ -163,6 +164,7 @@ async def update_customer(
                 tags=body.tags,
                 notes=body.notes,
                 address=body.address,
+                is_active=body.is_active,
             )
         )
         await session.commit()

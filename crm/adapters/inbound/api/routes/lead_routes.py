@@ -3,10 +3,13 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from adapters.outbound.persistence.database import get_session
 from pydantic import BaseModel
 
 from adapters.inbound.api.dependencies import (
     get_create_lead_uc,
+    get_lead_repo,
     get_lead_uc,
     get_list_leads_uc,
     get_move_lead_stage_uc,
@@ -14,6 +17,7 @@ from adapters.inbound.api.dependencies import (
 )
 from adapters.inbound.api.middleware.auth import CurrentUser, get_current_user
 from core.domain.lead import Lead
+from core.ports.outbound.lead_repository import LeadRepositoryPort
 from core.use_cases.leads.create_lead import CreateLeadRequest, CreateLeadUseCase
 from core.use_cases.leads.get_lead import GetLeadUseCase
 from core.use_cases.leads.list_leads import ListLeadsUseCase
@@ -132,6 +136,7 @@ async def create_lead(
     body: LeadCreateBody,
     current_user: CurrentUser = Depends(get_current_user),
     uc: CreateLeadUseCase = Depends(get_create_lead_uc),
+    session: AsyncSession = Depends(get_session),
 ):
     lead = await uc.execute(CreateLeadRequest(
         tenant_id=current_user.tenant_id,
@@ -144,6 +149,7 @@ async def create_lead(
         expected_close_date=body.expected_close_date,
         tags=body.tags,
     ))
+    await session.commit()
     return _lead_out(lead)
 
 
@@ -166,6 +172,7 @@ async def update_lead(
     body: LeadUpdateBody,
     current_user: CurrentUser = Depends(get_current_user),
     uc: UpdateLeadUseCase = Depends(get_update_lead_uc),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         lead = await uc.execute(UpdateLeadRequest(
@@ -182,6 +189,7 @@ async def update_lead(
         ))
     except ValueError:
         raise HTTPException(status_code=404, detail="Lead not found")
+    await session.commit()
     return _lead_out(lead)
 
 
@@ -191,6 +199,7 @@ async def move_lead_stage(
     body: MoveStageBody,
     current_user: CurrentUser = Depends(get_current_user),
     uc: MoveLeadStageUseCase = Depends(get_move_lead_stage_uc),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         lead = await uc.execute(MoveLeadStageRequest(
@@ -201,6 +210,7 @@ async def move_lead_stage(
         ))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await session.commit()
     return _lead_out(lead)
 
 
@@ -208,7 +218,10 @@ async def move_lead_stage(
 async def delete_lead(
     lead_id: UUID,
     current_user: CurrentUser = Depends(get_current_user),
+    repo: LeadRepositoryPort = Depends(get_lead_repo),
+    session: AsyncSession = Depends(get_session),
 ):
-    # Delete will be handled via dependency when needed
-    # For now just return 204
-    return None
+    deleted = await repo.delete(current_user.tenant_id, lead_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    await session.commit()

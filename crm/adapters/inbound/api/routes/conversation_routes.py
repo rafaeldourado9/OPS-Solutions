@@ -75,12 +75,13 @@ class SendMessageRequest(BaseModel):
 @router.get("", response_model=PaginatedConversations)
 async def list_conversations(
     status: Optional[str] = Query(None),
+    agent_id: Optional[str] = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     current_user: CurrentUser = Depends(get_current_user),
     uc: ListConversationsUseCase = Depends(get_list_conversations_uc),
 ):
-    result = await uc.execute(current_user.tenant_id, status, offset, limit)
+    result = await uc.execute(current_user.tenant_id, status, offset, limit, agent_id=agent_id)
     return PaginatedConversations(
         items=[
             ConversationOut(
@@ -108,16 +109,78 @@ async def list_conversations(
     )
 
 
+class RenameRequest(BaseModel):
+    name: str
+
+
+@router.patch("/{chat_id}/rename", status_code=200)
+async def rename_conversation_contact(
+    chat_id: str,
+    body: RenameRequest,
+    agent_id: Optional[str] = Query(None),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from adapters.outbound.persistence.database import async_session_factory
+    from adapters.outbound.persistence.repositories.pg_conversation_repository import PgConversationRepository
+    from sqlalchemy import update as sa_update
+    from adapters.outbound.persistence.models.conversation_model import ConversationModel
+    from adapters.outbound.persistence.models.customer_model import CustomerModel
+
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    async with async_session_factory() as session:
+        repo = PgConversationRepository(session)
+        conv = await repo.get_by_chat_id(current_user.tenant_id, chat_id, agent_id=agent_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        await session.execute(
+            sa_update(ConversationModel)
+            .where(ConversationModel.tenant_id == current_user.tenant_id, ConversationModel.chat_id == chat_id)
+            .values(customer_name=name)
+        )
+        if conv.customer_id:
+            await session.execute(
+                sa_update(CustomerModel)
+                .where(CustomerModel.tenant_id == current_user.tenant_id, CustomerModel.id == conv.customer_id)
+                .values(name=name)
+            )
+        await session.commit()
+
+    return {"chat_id": chat_id, "name": name}
+
+
+@router.delete("/{chat_id}", status_code=204)
+async def delete_conversation(
+    chat_id: str,
+    agent_id: Optional[str] = Query(None),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from adapters.outbound.persistence.database import async_session_factory
+    from adapters.outbound.persistence.repositories.pg_conversation_repository import PgConversationRepository
+    async with async_session_factory() as session:
+        repo = PgConversationRepository(session)
+        conv = await repo.get_by_chat_id(current_user.tenant_id, chat_id, agent_id=agent_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        await repo.delete_by_chat_id(current_user.tenant_id, chat_id, agent_id=agent_id)
+        await session.commit()
+
+
 @router.get("/{chat_id}/messages", response_model=PaginatedMessages)
 async def get_conversation_messages(
     chat_id: str,
     offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=500),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+    agent_id: Optional[str] = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
     uc: GetConversationMessagesUseCase = Depends(get_conversation_messages_uc),
 ):
     try:
-        result = await uc.execute(current_user.tenant_id, chat_id, offset, limit)
+        result = await uc.execute(current_user.tenant_id, chat_id, offset, limit, order=order, agent_id=agent_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -144,11 +207,12 @@ async def get_conversation_messages(
 @router.post("/{chat_id}/takeover", status_code=200)
 async def start_takeover(
     chat_id: str,
+    agent_id: Optional[str] = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
     uc: StartTakeoverUseCase = Depends(get_start_takeover_uc),
 ):
     try:
-        await uc.execute(current_user.tenant_id, chat_id, current_user.user_id)
+        await uc.execute(current_user.tenant_id, chat_id, current_user.user_id, agent_id=agent_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "takeover_started", "chat_id": chat_id}
@@ -157,11 +221,12 @@ async def start_takeover(
 @router.delete("/{chat_id}/takeover", status_code=200)
 async def end_takeover(
     chat_id: str,
+    agent_id: Optional[str] = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
     uc: EndTakeoverUseCase = Depends(get_end_takeover_uc),
 ):
     try:
-        await uc.execute(current_user.tenant_id, chat_id)
+        await uc.execute(current_user.tenant_id, chat_id, agent_id=agent_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"status": "takeover_ended", "chat_id": chat_id}
@@ -171,6 +236,7 @@ async def end_takeover(
 async def send_operator_message(
     chat_id: str,
     body: SendMessageRequest,
+    agent_id: Optional[str] = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
     uc: SendOperatorMessageUseCase = Depends(get_send_operator_message_uc),
 ):
@@ -181,6 +247,7 @@ async def send_operator_message(
             operator_id=current_user.user_id,
             operator_name=current_user.role,  # Will use user name from JWT in real scenario
             content=body.content,
+            agent_id=agent_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

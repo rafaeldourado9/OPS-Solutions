@@ -24,8 +24,9 @@ router = APIRouter(prefix="/api/v1/premises", tags=["premises"])
 
 class PremiseCreateBody(BaseModel):
     name: str
-    type: str  # "percentage" or "fixed"
+    type: str  # "percentage" | "fixed" | "multiplier"
     value: float
+    cost: float = 0.0
     description: str = ""
 
 
@@ -33,6 +34,7 @@ class PremiseUpdateBody(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
     value: Optional[float] = None
+    cost: Optional[float] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -43,6 +45,7 @@ class PremiseOut(BaseModel):
     name: str
     type: str
     value: float
+    cost: float
     description: str
     is_active: bool
     created_at: str
@@ -56,6 +59,7 @@ def _premise_out(p: Premise) -> PremiseOut:
         name=p.name,
         type=p.type.value if hasattr(p.type, "value") else p.type,
         value=p.value,
+        cost=p.cost,
         description=p.description,
         is_active=p.is_active,
         created_at=p.created_at.isoformat(),
@@ -87,6 +91,7 @@ async def create_premise(
             name=body.name,
             type=body.type,
             value=body.value,
+            cost=body.cost,
             description=body.description,
         ))
     except ValueError as e:
@@ -108,6 +113,7 @@ async def update_premise(
             name=body.name,
             type=body.type,
             value=body.value,
+            cost=body.cost,
             description=body.description,
             is_active=body.is_active,
         ))
