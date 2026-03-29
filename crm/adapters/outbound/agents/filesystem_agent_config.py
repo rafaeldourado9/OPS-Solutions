@@ -94,3 +94,7 @@ class FilesystemAgentConfigAdapter(AgentConfigPort):
         if not path.exists():
             raise FileNotFoundError(f"Agent '{agent_id}' not found")
         shutil.rmtree(str(path))
+
+
+# Alias for backwards-compat with import sites that use the shorter name
+FilesystemAgentConfig = FilesystemAgentConfigAdapter

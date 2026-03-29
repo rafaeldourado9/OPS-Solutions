@@ -1,9 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
+import structlog
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = structlog.get_logger()
 
 from adapters.inbound.api.dependencies import (
     get_login_uc,
@@ -484,9 +487,8 @@ async def update_integrations(
                     # Inform the agent process to reload this agent's config
                     async with httpx.AsyncClient() as client:
                         await client.post(f"{agents_api_url}/reload/{agent_id}", timeout=5.0)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).exception("Failed to sync agent config")
+        except Exception:
+            logger.exception("Failed to sync agent config to business.yml")
 
     return IntegrationsOut(
         gemini_api_key="",  # never return raw key
