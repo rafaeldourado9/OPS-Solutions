@@ -25,12 +25,11 @@ async def build_primary_llm(config: BusinessConfig):
     provider = config.llm.provider.lower()
     if provider == "gemini":
         try:
-            if config.llm.api_key:
-                os.environ.setdefault("GEMINI_API_KEY", config.llm.api_key)
             return GeminiAdapter(
                 model_name=config.llm.model,
                 temperature=config.llm.temperature,
                 max_tokens=config.llm.max_tokens,
+                api_key=config.llm.api_key,
             )
         except ValueError as exc:
             raise ValueError(
@@ -61,6 +60,7 @@ async def build_fallback_llm(config: BusinessConfig) -> Optional[object]:
                 model_name=config.llm.fallback_model,
                 temperature=config.llm.temperature,
                 max_tokens=config.llm.max_tokens,
+                api_key=config.llm.api_key,
             )
         except ValueError as exc:
             logger.warning("Fallback LLM (gemini) skipped — %s", exc)
@@ -99,6 +99,7 @@ def build_media(config: BusinessConfig):
             logger.info("TTS: OpenVoice v2 (sample=%s)", config.media.tts_voice_sample)
             return OpenVoiceTTSAdapter(
                 voice_sample_path=config.media.tts_voice_sample,
+                api_key=config.llm.api_key,
                 **gemini_kwargs,
             )
         except ValueError as exc:
@@ -108,7 +109,7 @@ def build_media(config: BusinessConfig):
 
     try:
         from adapters.outbound.media.gemini_media_adapter import GeminiMediaAdapter
-        return GeminiMediaAdapter(**gemini_kwargs)
+        return GeminiMediaAdapter(api_key=config.llm.api_key, **gemini_kwargs)
     except ValueError as exc:
         logger.warning("GeminiMediaAdapter skipped — %s. Falling back to NullMediaAdapter.", exc)
         from adapters.outbound.media.null_media_adapter import NullMediaAdapter

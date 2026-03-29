@@ -461,6 +461,33 @@ async def update_integrations(
     await session.commit()
 
     raw_gemini = current_integrations.get("gemini_api_key") or ""
+
+    # Synchronize agent's business.yml with the new Gemini API Key
+    if raw_gemini:
+        try:
+            import os
+            import httpx
+            from adapters.outbound.agents.filesystem_agent_config import FilesystemAgentConfig
+
+            agents_dir = os.environ.get("AGENTS_DIR", "/app/shared-agents")
+            agent_config_port = FilesystemAgentConfig(agents_dir)
+            agents_api_url = os.environ.get("AGENTS_API_URL", "http://agent:8000")
+
+            for agent_id in tenant.get_owned_agents():
+                if agent_config_port.exists(agent_id):
+                    config = agent_config_port.read(agent_id)
+                    if "llm" not in config:
+                        config["llm"] = {}
+                    config["llm"]["api_key"] = raw_gemini
+                    agent_config_port.write(agent_id, config)
+
+                    # Inform the agent process to reload this agent's config
+                    async with httpx.AsyncClient() as client:
+                        await client.post(f"{agents_api_url}/reload/{agent_id}", timeout=5.0)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception("Failed to sync agent config")
+
     return IntegrationsOut(
         gemini_api_key="",  # never return raw key
         gemini_api_key_set=bool(raw_gemini),

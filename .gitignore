@@ -16,4 +16,5 @@ agents/*/docs/*
 !agents/*/docs/.gitkeep
 claude.md
 .claude
-
+.pem
+ops.pem
