@@ -3,12 +3,18 @@ GeminiAdapter — LLMPort implementation using Google Generative AI.
 
 Uses the google-generativeai SDK with async streaming support.
 The system prompt is passed as system_instruction to the model.
+
+Dynamic API key: before each LLM call, the adapter checks
+/app/shared-agents/.gemini_key (written by the CRM when the user
+saves the key in Settings).  If the key changed, genai is reconfigured
+and the circuit breaker is reset — no container restart required.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 import google.generativeai as genai
@@ -19,8 +25,9 @@ from infrastructure.circuit_breaker import CircuitBreaker, CircuitOpenError
 
 logger = logging.getLogger(__name__)
 
-# One shared circuit breaker per adapter instance is the norm, but a
-# module-level default makes it easy to share across multiple instances.
+# Path where the CRM writes the Gemini API key at runtime.
+_SHARED_KEY_FILE = Path(os.environ.get("SHARED_GEMINI_KEY_FILE", "/app/shared-agents/.gemini_key"))
+
 _default_breaker = CircuitBreaker(
     name="gemini",
     failure_threshold=3,
@@ -28,30 +35,46 @@ _default_breaker = CircuitBreaker(
 )
 
 
+def _read_shared_key() -> str:
+    """Return the key from the shared file, or '' if missing/unreadable."""
+    try:
+        if _SHARED_KEY_FILE.exists():
+            key = _SHARED_KEY_FILE.read_text().strip()
+            if key:
+                return key
+    except Exception:
+        pass
+    return ""
+
+
 class GeminiAdapter(LLMPort):
     """
     LLMPort adapter for Google Gemini models.
 
     Args:
-        model_name:   Gemini model identifier (e.g. "gemini-3-flash-preview").
+        model_name:   Gemini model identifier (e.g. "gemini-2.0-flash").
         temperature:  Sampling temperature (0.0–1.0).
         max_tokens:   Maximum output tokens per response.
-        api_key:      Gemini API key; falls back to GEMINI_API_KEY env var.
+        api_key:      Initial Gemini API key; updated dynamically from
+                      shared file on every call.
     """
 
     def __init__(
         self,
-        model_name: str = "gemini-3-flash-preview",
+        model_name: str = "gemini-2.0-flash",
         temperature: float = 0.3,
         max_tokens: int = 400,
         api_key: Optional[str] = None,
         circuit_breaker: Optional[CircuitBreaker] = None,
     ) -> None:
-        resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        # Resolve initial key: shared file > argument > env var
+        resolved_key = _read_shared_key() or api_key or os.environ.get("GEMINI_API_KEY", "")
         if not resolved_key:
             raise ValueError(
-                "Gemini API key is required. Set GEMINI_API_KEY env var or pass api_key."
+                "Gemini API key is required. Set GEMINI_API_KEY env var, pass api_key, "
+                "or write the key to the shared file."
             )
+        self._api_key = resolved_key
         genai.configure(api_key=resolved_key)
         self._model_name = model_name
         self._temperature = temperature
@@ -61,6 +84,18 @@ class GeminiAdapter(LLMPort):
             max_output_tokens=max_tokens,
         )
         self._breaker = circuit_breaker or _default_breaker
+
+    def _refresh_key(self) -> None:
+        """
+        Check shared file for a newer key.  If changed, reconfigure genai
+        and reset the circuit breaker so the new key gets a clean slate.
+        """
+        latest = _read_shared_key() or os.environ.get("GEMINI_API_KEY", "")
+        if latest and latest != self._api_key:
+            logger.info("Gemini API key updated from shared file — reconfiguring and resetting circuit breaker")
+            self._api_key = latest
+            genai.configure(api_key=latest)
+            self._breaker.reset()
 
     def _get_model(self, system: str = "") -> genai.GenerativeModel:
         """Return a configured GenerativeModel, optionally with a system instruction."""
@@ -84,8 +119,6 @@ class GeminiAdapter(LLMPort):
             content = msg.get("content") or ""
 
             if role == "assistant":
-                # May have tool_calls — flatten to natural text for Gemini
-                # so it doesn't echo raw syntax back to the user.
                 tool_calls = msg.get("tool_calls") or []
                 if tool_calls and not content:
                     tc = tool_calls[0].get("function", {})
@@ -93,16 +126,9 @@ class GeminiAdapter(LLMPort):
                 gemini_messages.append({"role": "model", "parts": [content]})
 
             elif role == "tool":
-                # Tool result — present as user context, not echoed
-                gemini_messages.append({
-                    "role": "user",
-                    "parts": [
-                        content
-                    ],
-                })
+                gemini_messages.append({"role": "user", "parts": [content]})
 
             elif role == "system":
-                # Handled via system_instruction; skip here.
                 continue
 
             else:
@@ -116,8 +142,7 @@ class GeminiAdapter(LLMPort):
         system: str = "",
     ) -> AsyncIterator[str]:
         """Stream response chunks from Gemini, protected by circuit breaker."""
-        # Collect full response through breaker, then yield chunks
-        # (circuit breaker wraps the whole call, not individual chunks)
+        self._refresh_key()
         response_text = await self._breaker.call(self.generate, messages, system)
         yield response_text
 
@@ -145,7 +170,6 @@ class GeminiAdapter(LLMPort):
             try:
                 return response.text or ""
             except ValueError:
-                # finish_reason != STOP (e.g. SAFETY=2, RECITATION=3) — return empty
                 finish = None
                 if response.candidates:
                     finish = response.candidates[0].finish_reason
@@ -168,10 +192,10 @@ class GeminiAdapter(LLMPort):
           {"type": "text",      "content": "..."}
           {"type": "tool_call", "id": "...", "name": "...", "args": {...}}
         """
+        self._refresh_key()
         try:
             from google.generativeai.types import FunctionDeclaration, Tool as GeminiTool
 
-            # Convert OpenAI tool format → Gemini FunctionDeclaration
             declarations = []
             for tool in tools:
                 func = tool.get("function", {})
@@ -194,7 +218,6 @@ class GeminiAdapter(LLMPort):
                 stream=False,
             )
 
-            # Check for function call in response parts
             for candidate in response.candidates or []:
                 for part in candidate.content.parts or []:
                     if hasattr(part, "function_call") and part.function_call:
