@@ -10,7 +10,16 @@ function daysRemaining(trialEndsAt?: string | null): number {
 
 export default function TrialBanner() {
   const tenant = useAuthStore(s => s.tenant)
-  const [dismissed, setDismissed] = useState(false)
+  const storageKey = `trial_banner_dismissed_${tenant?.id}`
+  const [dismissed, setDismissed] = useState(() => {
+    if (!tenant?.id) return false
+    return localStorage.getItem(`trial_banner_dismissed_${tenant.id}`) === '1'
+  })
+
+  function dismiss() {
+    localStorage.setItem(storageKey, '1')
+    setDismissed(true)
+  }
 
   const days = daysRemaining(tenant?.trial_ends_at)
 
@@ -32,7 +41,7 @@ export default function TrialBanner() {
             </a>
           </span>
         </div>
-        <button onClick={() => setDismissed(true)} aria-label="Fechar aviso" className="shrink-0 opacity-70 hover:opacity-100 transition-opacity">
+        <button onClick={dismiss} aria-label="Fechar aviso" className="shrink-0 opacity-70 hover:opacity-100 transition-opacity">
           <X size={14} weight="bold" />
         </button>
       </div>
@@ -62,7 +71,7 @@ export default function TrialBanner() {
         </span>
       </div>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={dismiss}
         aria-label="Fechar aviso"
         className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
       >
