@@ -15,10 +15,9 @@ const inputCls = 'w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.
 const labelCls = 'block text-[12px] font-semibold text-zinc-500 mb-1.5'
 
 // ─── WhatsApp Number Card ────────────────────────────────────────────────────────
-function WhatsAppNumberCard({ number, instances }: { number: WhatsAppNumber; instances: AgentInstance[] }) {
+function WhatsAppNumberCard({ number }: { number: WhatsAppNumber }) {
   const qc = useQueryClient()
 
-  // Only poll QR if status is 'qr' (not connected)
   const isConnected = number.status === 'connected'
   const isConnecting = number.status === 'connecting' || number.status === 'qr'
 
@@ -57,96 +56,76 @@ function WhatsAppNumberCard({ number, instances }: { number: WhatsAppNumber; ins
   })
 
   const update = useMutation({
-    mutationFn: (updates: { label?: string; agent_id?: string }) => whatsappApi.updateNumber(number.id, updates),
+    mutationFn: (updates: { label?: string }) => whatsappApi.updateNumber(number.id, updates),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
   })
 
+  const statusColor = isConnected ? 'emerald' : isConnecting ? 'amber' : 'red'
+  const statusLabel = isConnected
+    ? `Conectado${number.phone_number ? ` · ${number.phone_number}` : ''}`
+    : isConnecting ? 'Aguardando leitura do QR Code...' : 'Desconectado'
+
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
-      {/* Header / Info */}
-      <div className={`p-4 flex items-start sm:items-center gap-4 border-b border-zinc-100 ${
-        isConnected ? 'bg-emerald-50/50' : isConnecting ? 'bg-amber-50/50' : 'bg-red-50/50'
-      }`}>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-1 sm:mt-0 ${
-          isConnected ? 'bg-emerald-100' : isConnecting ? 'bg-amber-100' : 'bg-red-100'
-        }`}>
+    <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden shadow-[0_1px_12px_rgba(0,0,0,0.06)]">
+      {/* Header */}
+      <div className="p-4 flex items-center gap-3">
+        {/* Status dot */}
+        <div className={`relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-${statusColor}-50`}>
           {isConnected ? (
-            <WifiHigh size={18} weight="fill" className="text-emerald-600" />
+            <WifiHigh size={18} weight="fill" className="text-emerald-500" />
           ) : isConnecting ? (
-            <WifiSlash size={18} weight="fill" className="text-amber-600" />
+            <WifiSlash size={18} weight="fill" className="text-amber-500" />
           ) : (
-            <WifiX size={18} weight="fill" className="text-red-500" />
+            <WifiX size={18} weight="fill" className="text-red-400" />
+          )}
+          {isConnected && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </span>
           )}
         </div>
+
+        {/* Label + status */}
         <div className="flex-1 min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <input
-              className="text-[14px] font-bold text-[#1D1D1F] bg-transparent border-none focus:ring-2 focus:ring-[#0ABAB5]/50 px-1 -ml-1 rounded transition-colors"
-              defaultValue={number.label || 'Meu WhatsApp'}
-              onBlur={(e) => {
-                if (e.target.value !== number.label) update.mutate({ label: e.target.value })
-              }}
-            />
-            {isConnected && (
-              <span className="inline-flex h-2 w-2 shrink-0 self-start sm:self-center">
-                <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-            )}
-          </div>
-          <p className={`text-[12px] mt-0.5 ${
-            isConnected ? 'text-emerald-700' : isConnecting ? 'text-amber-700' : 'text-red-600'
-          }`}>
-            {isConnected ? `Conectado: ${number.phone_number || ''}` : 
-             isConnecting ? 'Aguardando QR Code...' : 'Desconectado'}
-          </p>
+          <input
+            className="text-[14px] font-semibold text-[#1D1D1F] bg-transparent border-none outline-none focus:ring-2 focus:ring-[#0ABAB5]/30 px-1 -ml-1 rounded w-full truncate"
+            defaultValue={number.label || 'WhatsApp'}
+            onBlur={(e) => {
+              if (e.target.value !== number.label) update.mutate({ label: e.target.value })
+            }}
+          />
+          <p className={`text-[11px] mt-0.5 truncate text-${statusColor}-600`}>{statusLabel}</p>
         </div>
-        
-        {/* Agent Select */}
-        <div className="flex flex-col items-end gap-1">
-          <select 
-            className="text-[12px] bg-white border border-zinc-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#0ABAB5]"
-            value={number.agent_id || ''}
-            onChange={(e) => update.mutate({ agent_id: e.target.value || undefined })}
-          >
-            <option value="">Agent: Padrão da Conta</option>
-            {instances.map(inst => (
-              <option key={inst.agent_id} value={inst.agent_id}>Agent: {inst.name || inst.agent_id}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => remove.mutate()}
-            disabled={remove.isPending}
-            className="text-[12px] text-zinc-400 hover:text-red-500 transition-colors p-1"
-            title="Remover número"
-          >
-            <Trash size={16} />
-          </button>
-        </div>
+
+        {/* Session badge */}
+        <span className="hidden sm:inline text-[10px] font-mono text-zinc-300 truncate max-w-[120px]">
+          {number.session_name}
+        </span>
       </div>
 
       {/* QR Code Section */}
       {!isConnected && (
-        <div className="p-4 bg-zinc-50 border-b border-zinc-100 flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2 text-zinc-500 self-start">
-            <QrCode size={16} weight="duotone" />
-            <p className="text-[12px] font-medium">Abra o WhatsApp e escaneie o código</p>
+        <div className="mx-4 mb-4 bg-zinc-50 rounded-xl border border-zinc-100 flex flex-col items-center gap-3 p-4">
+          <div className="flex items-center gap-1.5 text-zinc-400 self-start">
+            <QrCode size={14} weight="duotone" />
+            <p className="text-[11px] font-medium">Abra o WhatsApp e escaneie o QR Code</p>
           </div>
-          
+
           {loadingQr ? (
-            <div className="flex flex-col items-center gap-3 py-6">
-              <SpinnerGap size={24} className="animate-spin text-[#0ABAB5]" />
-              <p className="text-[12px] text-zinc-400">Verificando...</p>
+            <div className="flex flex-col items-center gap-2 py-8">
+              <SpinnerGap size={22} className="animate-spin text-[#0ABAB5]" />
+              <p className="text-[11px] text-zinc-400">Gerando QR Code...</p>
             </div>
           ) : qrData?.qr ? (
             <div className="p-2 bg-white border border-zinc-200 rounded-xl shadow-sm">
-              <img src={qrData.qr} alt="QR Code WhatsApp" className="w-48 h-48" />
+              <img src={qrData.qr} alt="QR Code WhatsApp" className="w-44 h-44" />
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2 py-6 text-zinc-300">
-              <Warning size={32} weight="duotone" className="text-amber-400" />
-              <p className="text-[12px] text-zinc-500">
-                Se o bot estiver travado, clique em Reiniciar.
+            <div className="flex flex-col items-center gap-2 py-8">
+              <Warning size={28} weight="duotone" className="text-amber-400" />
+              <p className="text-[11px] text-zinc-500 text-center">
+                QR Code indisponível. Tente reiniciar.
               </p>
             </div>
           )}
@@ -154,25 +133,33 @@ function WhatsAppNumberCard({ number, instances }: { number: WhatsAppNumber; ins
       )}
 
       {/* Actions */}
-      <div className="px-4 py-3 bg-white flex gap-2">
+      <div className="px-4 pb-3 flex items-center gap-2">
         <button
           onClick={() => restart.mutate()}
           disabled={restart.isPending}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50 transition-all disabled:opacity-60"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] font-medium text-zinc-500 hover:bg-zinc-50 hover:border-zinc-300 transition-all disabled:opacity-50"
         >
-          {restart.isPending ? <SpinnerGap size={14} className="animate-spin" /> : <ArrowClockwise size={14} />}
+          {restart.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <ArrowClockwise size={13} />}
           Reiniciar
         </button>
         {isConnected && (
           <button
             onClick={() => logout.mutate()}
             disabled={logout.isPending}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-200 text-[12px] font-medium text-red-500 hover:bg-red-50 transition-all disabled:opacity-60"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] font-medium text-zinc-500 hover:border-red-200 hover:text-red-500 hover:bg-red-50/50 transition-all disabled:opacity-50"
           >
-            {logout.isPending ? <SpinnerGap size={14} className="animate-spin" /> : <SignOut size={14} />}
-            Desconectar Site
+            {logout.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <SignOut size={13} />}
+            Desconectar
           </button>
         )}
+        <button
+          onClick={() => remove.mutate()}
+          disabled={remove.isPending}
+          className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-zinc-300 hover:text-red-400 hover:bg-red-50/60 transition-all disabled:opacity-50"
+          title="Remover número"
+        >
+          {remove.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <Trash size={13} />}
+        </button>
       </div>
     </div>
   )
@@ -187,13 +174,8 @@ function WhatsAppTab() {
     refetchInterval: 5000,
   })
 
-  const { data: instances = [] } = useQuery<AgentInstance[]>({
-    queryKey: ['agent-instances'],
-    queryFn: agentsApi.listInstances,
-  })
-
   const addNumber = useMutation({
-    mutationFn: (agent_id?: string) => whatsappApi.addNumber({ label: 'Novo Número', agent_id }),
+    mutationFn: () => whatsappApi.addNumber({ label: 'WhatsApp' }),
     onSuccess: () => {
       toast.success('Novo número adicionado')
       qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
@@ -210,16 +192,16 @@ function WhatsAppTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[14px] font-bold text-[#1D1D1F]">Números Conectados</h2>
-          <p className="text-[12px] text-zinc-500">
-            Associe múltiplos números de WhatsApp à sua conta e direcione para instâncias específicas
+          <p className="text-[12px] text-zinc-400 mt-0.5">
+            Conecte seu WhatsApp para o agente começar a atender
           </p>
         </div>
         <button
-          onClick={() => addNumber.mutate(undefined)}
+          onClick={() => addNumber.mutate()}
           disabled={addNumber.isPending}
           className="flex items-center gap-2 bg-[#0ABAB5] hover:bg-[#089B97] text-white text-[12px] font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-60"
         >
@@ -229,17 +211,19 @@ function WhatsAppTab() {
       </div>
 
       {numbers.length === 0 ? (
-        <div className="flex flex-col items-center py-16 text-zinc-300 bg-white rounded-2xl border border-zinc-100 shadow-[0_1px_12px_rgba(0,0,0,0.06)]">
-          <Chats size={48} weight="duotone" className="text-zinc-200 mb-2" />
-          <p className="text-[14px] font-medium text-zinc-500">Nenhum número conectado</p>
-          <p className="text-[12px] text-zinc-400 text-center max-w-sm mt-1">
-            Clique em "Adicionar Número" para conectar um novo WhatsApp à sua conta.
+        <div className="flex flex-col items-center py-16 bg-white rounded-2xl border border-zinc-100 shadow-[0_1px_12px_rgba(0,0,0,0.06)]">
+          <div className="w-14 h-14 rounded-2xl bg-zinc-50 flex items-center justify-center mb-3">
+            <Chats size={28} weight="duotone" className="text-zinc-300" />
+          </div>
+          <p className="text-[14px] font-semibold text-zinc-500">Nenhum número conectado</p>
+          <p className="text-[12px] text-zinc-400 text-center max-w-xs mt-1.5">
+            Clique em "Adicionar Número" e escaneie o QR Code para começar.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {numbers.map((n: WhatsAppNumber) => (
-            <WhatsAppNumberCard key={n.id} number={n} instances={instances} />
+            <WhatsAppNumberCard key={n.id} number={n} />
           ))}
         </div>
       )}
