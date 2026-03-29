@@ -486,6 +486,42 @@ async def update_integrations(
     )
 
 
+@router.post("/tenant/integrations/test-webhook", status_code=200)
+async def test_webhook(
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Send a test payload to the tenant's configured webhook URL."""
+    import httpx
+    from adapters.outbound.persistence.repositories.pg_tenant_repository import PgTenantRepository
+
+    repo = PgTenantRepository(session)
+    tenant = await repo.get_by_id(current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    webhook_url = (tenant.raw_settings or {}).get("integrations", {}).get("webhook_url", "")
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="Nenhuma URL de webhook configurada")
+
+    payload = {
+        "event_type": "test",
+        "tenant_id": str(tenant.id),
+        "agent_id": tenant.get_active_agent_id() or "",
+        "chat_id": "test-chat",
+        "data": {"message": "Teste de webhook do CRM", "tenant": tenant.name},
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json=payload)
+        return {"status": "ok", "http_status": resp.status_code, "url": webhook_url}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=408, detail="Timeout ao conectar com a URL")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao enviar: {str(e)}")
+
+
 # ── Company profile ───────────────────────────────────────────────────────────
 
 class CompanyProfileBody(BaseModel):

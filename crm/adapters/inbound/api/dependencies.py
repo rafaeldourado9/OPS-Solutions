@@ -294,7 +294,7 @@ async def get_receive_agent_event_uc(
     store_message_uc = StoreAgentEventMessageUseCase(
         conversation_repo, message_repo, customer_repo, tenant_repo, notification,
     )
-    return ReceiveAgentEventUseCase(sync_uc, store_message_uc)
+    return ReceiveAgentEventUseCase(sync_uc, store_message_uc, tenant_repo)
 
 
 # --- Premise Use Cases ---

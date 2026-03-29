@@ -79,6 +79,9 @@ export const settingsApi = {
   updateIntegrations: (data: Partial<Integrations>) =>
     api.put<Integrations>('/api/v1/auth/tenant/integrations', data).then((r: any) => r.data),
 
+  testWebhook: () =>
+    api.post<{ status: string; http_status: number; url: string }>('/api/v1/auth/tenant/integrations/test-webhook').then((r: any) => r.data),
+
   getCompany: () =>
     api.get<CompanyProfile>('/api/v1/auth/tenant/company').then((r: any) => r.data),
 

@@ -582,6 +582,12 @@ function IntegracoesTab() {
     },
   })
 
+  const testWebhook = useMutation({
+    mutationFn: settingsApi.testWebhook,
+    onSuccess: (data) => toast.success(`Webhook OK — HTTP ${data.http_status}`),
+    onError: (err: any) => toast.error(err?.response?.data?.detail ?? 'Erro ao testar webhook'),
+  })
+
   function set(key: keyof Integrations, value: string | number) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
@@ -597,20 +603,31 @@ function IntegracoesTab() {
         <div className="space-y-3">
           <div>
             <label className={labelCls}>URL do Webhook <span className="text-zinc-400 font-normal">(opcional)</span></label>
-            <input
-              type="url"
-              value={(form as any).webhook_url ?? ''}
-              onChange={e => set('webhook_url' as any, e.target.value)}
-              placeholder="https://hooks.zapier.com/hooks/catch/..."
-              className={inputCls}
-            />
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={(form as any).webhook_url ?? ''}
+                onChange={e => set('webhook_url' as any, e.target.value)}
+                placeholder="https://hooks.zapier.com/hooks/catch/..."
+                className={inputCls}
+              />
+              <button
+                type="button"
+                onClick={() => testWebhook.mutate()}
+                disabled={testWebhook.isPending || !(form as any).webhook_url}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 text-[12px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 transition-all"
+              >
+                {testWebhook.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <ArrowSquareOut size={13} />}
+                Testar
+              </button>
+            </div>
           </div>
           <div className="bg-zinc-50 rounded-xl p-3 space-y-1.5">
             <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">Eventos enviados</p>
-            {['Novo lead criado', 'Nova conversa iniciada', 'Takeover humano ativado', 'Orçamento gerado', 'Contrato assinado'].map(ev => (
+            {['new_contact', 'message_received', 'agent_response_sent', 'conversation_closed'].map(ev => (
               <div key={ev} className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#0ABAB5] shrink-0" />
-                <span className="text-[12px] text-zinc-600">{ev}</span>
+                <span className="text-[12px] font-mono text-zinc-600">{ev}</span>
               </div>
             ))}
           </div>
