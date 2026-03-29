@@ -30,6 +30,7 @@ class PgQuoteRepository(QuoteRepositoryPort):
                 notes=quote.notes,
                 valid_until=quote.valid_until,
                 currency=quote.currency,
+                sale_price=quote.sale_price,
                 items_json=self._items_to_json(quote.items),
                 applied_premises_json=self._premises_to_json(quote.applied_premises),
                 updated_at=quote.updated_at,
@@ -124,6 +125,7 @@ class PgQuoteRepository(QuoteRepositoryPort):
             notes=q.notes,
             valid_until=q.valid_until,
             currency=q.currency,
+            sale_price=q.sale_price,
             items_json=cls._items_to_json(q.items),
             applied_premises_json=cls._premises_to_json(q.applied_premises),
             created_at=q.created_at,
@@ -168,6 +170,7 @@ class PgQuoteRepository(QuoteRepositoryPort):
             notes=m.notes,
             valid_until=m.valid_until,
             currency=m.currency,
+            sale_price=m.sale_price,
             created_at=m.created_at,
             updated_at=m.updated_at,
         )

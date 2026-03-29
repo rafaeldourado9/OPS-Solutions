@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, text
@@ -176,8 +176,8 @@ class PgDashboardRepository(DashboardRepositoryPort):
                 gs.month AS month_start,
                 (gs.month + INTERVAL '1 month') AS month_end
             FROM generate_series(
-                DATE_TRUNC('month', NOW() - ((:months - 1) || ' months')::INTERVAL),
-                DATE_TRUNC('month', NOW()),
+                DATE_TRUNC('month', NOW() AT TIME ZONE 'UTC' - ((:months - 1) || ' months')::INTERVAL),
+                DATE_TRUNC('month', NOW() AT TIME ZONE 'UTC'),
                 INTERVAL '1 month'
             ) AS gs(month)
             ORDER BY gs.month

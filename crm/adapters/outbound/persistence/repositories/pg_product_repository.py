@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from adapters.outbound.persistence.models.product_model import ProductModel, StockMovementModel
 from core.domain.product import MovementType, Product, StockMovement
@@ -48,7 +49,9 @@ class PgProductRepository(ProductRepositoryPort):
 
     async def get_by_sku(self, tenant_id: UUID, sku: str) -> Optional[Product]:
         stmt = select(ProductModel).where(
-            ProductModel.sku == sku, ProductModel.tenant_id == tenant_id
+            ProductModel.sku == sku,
+            ProductModel.tenant_id == tenant_id,
+            ProductModel.is_active == True,  # noqa: E712
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -147,6 +150,37 @@ class PgStockMovementRepository(StockMovementRepositoryPort):
             StockMovementModel.tenant_id == tenant_id,
             StockMovementModel.product_id == product_id,
         )
+
+        count_stmt = select(func.count()).select_from(base.subquery())
+        total = (await self._session.execute(count_stmt)).scalar() or 0
+
+        query = base.order_by(StockMovementModel.created_at.desc()).offset(offset).limit(limit)
+        result = await self._session.execute(query)
+        movements = [
+            StockMovement(
+                id=m.id,
+                tenant_id=m.tenant_id,
+                product_id=m.product_id,
+                type=MovementType(m.type),
+                quantity=m.quantity,
+                reason=m.reason,
+                reference_id=m.reference_id,
+                created_at=m.created_at,
+            )
+            for m in result.scalars().all()
+        ]
+        return movements, total
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        product_ids: Optional[list[UUID]] = None,
+        offset: int = 0,
+        limit: int = 500,
+    ) -> tuple[list[StockMovement], int]:
+        base = select(StockMovementModel).where(StockMovementModel.tenant_id == tenant_id)
+        if product_ids:
+            base = base.where(StockMovementModel.product_id.in_(product_ids))
 
         count_stmt = select(func.count()).select_from(base.subquery())
         total = (await self._session.execute(count_stmt)).scalar() or 0

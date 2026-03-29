@@ -29,3 +29,4 @@ class LeadModel(Base):
     tags: Mapped[list] = mapped_column(ARRAY(String), default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_inactivity_email_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

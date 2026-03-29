@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapters.outbound.persistence.models.conversation_model import ConversationModel
@@ -41,13 +41,13 @@ class PgConversationRepository(ConversationRepositoryPort):
         await self._session.execute(stmt)
         await self._session.flush()
 
-    async def get_by_chat_id(self, tenant_id: UUID, chat_id: str) -> Optional[Conversation]:
-        stmt = select(ConversationModel).where(
-            ConversationModel.tenant_id == tenant_id,
-            ConversationModel.chat_id == chat_id,
-        )
+    async def get_by_chat_id(self, tenant_id: UUID, chat_id: str, agent_id: Optional[str] = None) -> Optional[Conversation]:
+        conditions = [ConversationModel.tenant_id == tenant_id, ConversationModel.chat_id == chat_id]
+        if agent_id:
+            conditions.append(ConversationModel.agent_id == agent_id)
+        stmt = select(ConversationModel).where(*conditions).order_by(ConversationModel.created_at.desc()).limit(1)
         result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
+        model = result.scalars().first()
         return self._to_domain(model) if model else None
 
     async def get_by_id(self, tenant_id: UUID, conversation_id: UUID) -> Optional[Conversation]:
@@ -60,12 +60,16 @@ class PgConversationRepository(ConversationRepositoryPort):
         return self._to_domain(model) if model else None
 
     async def list_by_tenant(
-        self, tenant_id: UUID, status: Optional[str] = None, offset: int = 0, limit: int = 50
+        self, tenant_id: UUID, status: Optional[str] = None, offset: int = 0, limit: int = 50,
+        agent_id: Optional[str] = None,
     ) -> tuple[list[Conversation], int]:
         base = select(ConversationModel).where(ConversationModel.tenant_id == tenant_id)
 
         if status:
             base = base.where(ConversationModel.status == status)
+
+        if agent_id:
+            base = base.where(ConversationModel.agent_id == agent_id)
 
         count_stmt = select(func.count()).select_from(base.subquery())
         total_result = await self._session.execute(count_stmt)
@@ -76,6 +80,24 @@ class PgConversationRepository(ConversationRepositoryPort):
         items = [self._to_domain(m) for m in result.scalars().all()]
 
         return items, total
+
+    async def delete_by_chat_id(self, tenant_id: UUID, chat_id: str, agent_id: Optional[str] = None) -> None:
+        from adapters.outbound.persistence.models.message_model import CRMMessageModel
+        # Find conversations to delete (scoped by agent_id if provided)
+        conv_conditions = [ConversationModel.tenant_id == tenant_id, ConversationModel.chat_id == chat_id]
+        if agent_id:
+            conv_conditions.append(ConversationModel.agent_id == agent_id)
+        conv_ids_stmt = select(ConversationModel.id).where(*conv_conditions)
+        result = await self._session.execute(conv_ids_stmt)
+        conv_ids = [r for r in result.scalars().all()]
+        if conv_ids:
+            await self._session.execute(
+                delete(CRMMessageModel).where(CRMMessageModel.conversation_id.in_(conv_ids))
+            )
+            await self._session.execute(
+                delete(ConversationModel).where(ConversationModel.id.in_(conv_ids))
+            )
+        await self._session.flush()
 
     @staticmethod
     def _to_model(c: Conversation) -> ConversationModel:

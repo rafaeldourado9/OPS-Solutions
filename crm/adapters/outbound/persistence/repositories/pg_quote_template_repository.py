@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -17,6 +18,22 @@ class PgQuoteTemplateRepository(QuoteTemplateRepositoryPort):
     async def save(self, template: QuoteTemplate) -> None:
         self._session.add(self._to_model(template))
         await self._session.flush()
+
+    async def update_mapping(
+        self, tenant_id: UUID, template_id: UUID, field_mapping: dict[str, str]
+    ) -> Optional[QuoteTemplate]:
+        stmt = select(QuoteTemplateModel).where(
+            QuoteTemplateModel.id == template_id,
+            QuoteTemplateModel.tenant_id == tenant_id,
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if not model:
+            return None
+        model.field_mapping = field_mapping
+        model.updated_at = datetime.utcnow()
+        await self._session.flush()
+        return self._to_domain(model)
 
     async def get_by_id(self, tenant_id: UUID, template_id: UUID) -> Optional[QuoteTemplate]:
         stmt = select(QuoteTemplateModel).where(
@@ -58,6 +75,7 @@ class PgQuoteTemplateRepository(QuoteTemplateRepositoryPort):
             description=t.description,
             file_key=t.file_key,
             placeholders=t.placeholders,
+            field_mapping=t.field_mapping,
             created_at=t.created_at,
             updated_at=t.updated_at,
         )
@@ -71,6 +89,7 @@ class PgQuoteTemplateRepository(QuoteTemplateRepositoryPort):
             description=m.description,
             file_key=m.file_key,
             placeholders=m.placeholders or [],
+            field_mapping=m.field_mapping or {},
             created_at=m.created_at,
             updated_at=m.updated_at,
         )

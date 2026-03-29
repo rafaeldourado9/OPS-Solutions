@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
@@ -21,4 +22,5 @@ class UserModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="operator")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

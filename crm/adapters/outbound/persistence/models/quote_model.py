@@ -22,6 +22,7 @@ class QuoteModel(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     valid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     currency: Mapped[str] = mapped_column(String(10), default="BRL")
+    sale_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Store items and applied_premises as JSON for simplicity
     items_json: Mapped[dict] = mapped_column(JSON, default=list)
     applied_premises_json: Mapped[dict] = mapped_column(JSON, default=list)

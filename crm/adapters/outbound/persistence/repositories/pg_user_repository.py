@@ -23,6 +23,7 @@ class PgUserRepository(UserRepositoryPort):
             name=user.name,
             role=user.role.value,
             is_active=user.is_active,
+            avatar_url=user.avatar_url,
             created_at=user.created_at,
         )
         self._session.add(model)
@@ -56,6 +57,7 @@ class PgUserRepository(UserRepositoryPort):
             name=model.name,
             role=Role(model.role),
             is_active=model.is_active,
+            avatar_url=getattr(model, 'avatar_url', None),
             created_at=model.created_at,
         )
 

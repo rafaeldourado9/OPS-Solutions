@@ -29,7 +29,8 @@ class PgMessageRepository(MessageRepositoryPort):
         await self._session.flush()
 
     async def list_by_conversation(
-        self, tenant_id: UUID, conversation_id: UUID, offset: int = 0, limit: int = 100
+        self, tenant_id: UUID, conversation_id: UUID,
+        offset: int = 0, limit: int = 100, order: str = "asc",
     ) -> tuple[list[CRMMessage], int]:
         base = select(CRMMessageModel).where(
             CRMMessageModel.tenant_id == tenant_id,
@@ -40,7 +41,8 @@ class PgMessageRepository(MessageRepositoryPort):
         total_result = await self._session.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        query = base.order_by(CRMMessageModel.created_at.asc()).offset(offset).limit(limit)
+        sort = CRMMessageModel.created_at.desc() if order == "desc" else CRMMessageModel.created_at.asc()
+        query = base.order_by(sort).offset(offset).limit(limit)
         result = await self._session.execute(query)
         items = [self._to_domain(m) for m in result.scalars().all()]
 
