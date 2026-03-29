@@ -15,7 +15,17 @@
       "Bash(npx tsc:*)",
       "Bash(docker compose:*)",
       "Bash(docker exec:*)",
-      "Bash(find /d/CRM -type f -name docker*)"
+      "Bash(find /d/CRM -type f -name docker*)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?|vue\\)$\")",
+      "Read(//d/CRM/crm/**)",
+      "Bash(python -c \"from adapters.inbound.api.routes.contract_routes import router; print\\(''contract_routes OK''\\)\")",
+      "Bash(python:*)",
+      "Bash(docker ps:*)",
+      "Bash(curl -s -X POST http://localhost/api/v1/auth/register -H \"Content-Type: application/json\" -d '{\"\"\"\"tenant_name\"\"\"\":\"\"\"\"Teste\"\"\"\",\"\"\"\"tenant_slug\"\"\"\":\"\"\"\"teste-co\"\"\"\",\"\"\"\"name\"\"\"\":\"\"\"\"Admin Teste\"\"\"\",\"\"\"\"email\"\"\"\":\"\"\"\"admin@teste.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"senha1234\"\"\"\"}')",
+      "Bash(curl -s http://gateway:3000/api/qr)",
+      "Bash(curl -s http://localhost:3000/api/qr)",
+      "Bash(docker-compose up:*)",
+      "Bash(grep -r \"trial_ends_at\\\\|subscription_status\\\\|plan\" /d/CRM/crm/adapters/inbound/api/routes/*.py)"
     ]
   }
 }
