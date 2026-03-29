@@ -79,7 +79,7 @@ class FilesystemAgentConfigAdapter(AgentConfigPort):
                     "persona": "Você é um assistente simpático e profissional. Responde com objetividade, em mensagens curtas, como numa conversa real no WhatsApp. Usa linguagem informal mas respeitosa. Quando não souber algo, diz que vai verificar com a equipe.",
                     "admin_phones": [],
                 },
-                "llm": {"provider": "gemini", "model": "gemini-2.0-flash", "temperature": 0.7, "max_tokens": 8192},
+                "llm": {"provider": "gemini", "model": "gemini-2.0-flash", "api_key": "${GEMINI_API_KEY}", "temperature": 0.7, "max_tokens": 8192},
                 "messaging": {"debounce_seconds": 2.5, "max_message_chars": 180, "typing_delay_per_char": 0.04, "min_pause_between_parts": 1.2, "max_pause_between_parts": 2.8},
                 "memory": {"qdrant_collection": f"{agent_id}_chats", "qdrant_rag_collection": f"{agent_id}_rules", "semantic_k": 6, "max_recent_messages": 15, "embedding_model": "nomic-embed-text"},
                 "anti_hallucination": {"rag_mandatory": False, "unknown_answer": "Não tenho essa informação no momento, mas posso verificar com nossa equipe!", "grounding_enabled": True},
