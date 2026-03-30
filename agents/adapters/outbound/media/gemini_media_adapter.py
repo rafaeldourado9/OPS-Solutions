@@ -23,6 +23,48 @@ import httpx
 
 from core.ports.media_port import MediaPort
 
+
+def _read_shared_key() -> str:
+    """Read Gemini API key from shared file written by CRM Settings."""
+    import os
+    from pathlib import Path
+    key_file = os.environ.get("SHARED_GEMINI_KEY_FILE", "")
+    if key_file:
+        try:
+            k = Path(key_file).read_text().strip()
+            if k:
+                return k
+        except Exception:
+            pass
+    agents_dir = os.environ.get("AGENTS_DIR", "/app/shared-agents")
+    try:
+        k = (Path(agents_dir) / ".gemini_key").read_text().strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    return ""
+
+
+def _read_shared_key() -> str:
+    """Read Gemini API key from shared file — same logic as gemini_adapter.py."""
+    key_file_path = os.environ.get('SHARED_GEMINI_KEY_FILE', '')
+    if key_file_path:
+        try:
+            key = Path(key_file_path).read_text().strip()
+            if key:
+                return key
+        except Exception:
+            pass
+    agents_dir = os.environ.get('AGENTS_DIR', '/app/shared-agents')
+    try:
+        key = (Path(agents_dir) / '.gemini_key').read_text().strip()
+        if key:
+            return key
+    except Exception:
+        pass
+    return ""
+
 logger = logging.getLogger(__name__)
 
 # Prompts (Portuguese context for commercial support)
@@ -87,9 +129,9 @@ class GeminiMediaAdapter(MediaPort):
         self._video_model = video_model or image_model
         self._timeout = timeout
 
-        resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        resolved_key = _read_shared_key() or api_key or ""
         if not resolved_key:
-            raise ValueError("Gemini API key required. Set GEMINI_API_KEY env var.")
+            raise ValueError("Gemini API key not configured. Go to Settings -> Integrations.")
         self._api_key = resolved_key
         genai.configure(api_key=resolved_key)
 
