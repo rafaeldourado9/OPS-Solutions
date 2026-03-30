@@ -4,11 +4,11 @@ QdrantAdapter — vector store operations using Qdrant.
 Handles:
   - Semantic search over past conversation messages (per chat_id)
   - RAG search over ingested business documents (per agent_id)
-  - Embedding generation via Ollama nomic-embed-text
+  - Embedding generation via Gemini text-embedding-001
 
 Collection naming:
   - Chat memory:    {agent_id}_chats  (one collection per agent)
-  - Business rules: {agent_id}_rules  (populated by ingest script)
+  - Business rules: {agent_id}_rules  (populated via CRM RAG upload)
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
+import httpx
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
@@ -30,14 +32,55 @@ from qdrant_client.models import (
     FilterSelector,
 )
 
-from adapters.outbound.llm.ollama_adapter import get_embedding
 from core.domain.memory import Memory
 from core.domain.message import Message
 
 logger = logging.getLogger(__name__)
 
-# nomic-embed-text produces 768-dimensional vectors
-_EMBEDDING_DIM = 768
+# gemini-embedding-001 produces 3072-dimensional vectors
+_EMBEDDING_DIM = 3072
+_GEMINI_EMBED_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "gemini-embedding-001:embedContent?key={key}"
+)
+
+
+def _read_gemini_key() -> str:
+    """Read Gemini API key from shared file or environment."""
+    key_file_path = os.environ.get("SHARED_GEMINI_KEY_FILE", "")
+    if key_file_path:
+        try:
+            key = Path(key_file_path).read_text().strip()
+            if key:
+                return key
+        except Exception:
+            pass
+    # fallback: AGENTS_DIR/.gemini_key (used by CRM RAG adapter)
+    agents_dir = os.environ.get("AGENTS_DIR", "/app/shared-agents")
+    try:
+        key = (Path(agents_dir) / ".gemini_key").read_text().strip()
+        if key:
+            return key
+    except Exception:
+        pass
+    return ""
+
+
+async def get_embedding(text: str, model: str = "") -> list[float]:
+    """Generate embedding via Gemini gemini-embedding-001."""
+    api_key = _read_gemini_key()
+    if not api_key:
+        raise ValueError("Gemini API key not configured")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            _GEMINI_EMBED_URL.format(key=api_key),
+            json={
+                "model": "models/gemini-embedding-001",
+                "content": {"parts": [{"text": text}]},
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["embedding"]["values"]
 
 
 class QdrantAdapter:
@@ -50,7 +93,7 @@ class QdrantAdapter:
     Args:
         chat_collection:  Qdrant collection name for conversation memory.
         rules_collection: Qdrant collection name for business rules (RAG).
-        embedding_model:  Ollama model used for embedding generation.
+        embedding_model:  Ignored (kept for API compatibility).
         qdrant_url:       Qdrant server URL; falls back to QDRANT_URL env var.
         qdrant_api_key:   Optional API key for hosted Qdrant.
     """
@@ -59,7 +102,7 @@ class QdrantAdapter:
         self,
         chat_collection: str,
         rules_collection: str,
-        embedding_model: str = "nomic-embed-text",
+        embedding_model: str = "gemini-embedding-001",
         qdrant_url: Optional[str] = None,
         qdrant_api_key: Optional[str] = None,
     ) -> None:
@@ -155,10 +198,7 @@ class QdrantAdapter:
     async def save_message_vector(self, message: Message) -> None:
         """Embed a message and upsert it into the chat collection."""
         try:
-            vector = await get_embedding(
-                text=message.content,
-                model=self._embedding_model,
-            )
+            vector = await get_embedding(text=message.content)
         except Exception:
             logger.exception(
                 "Embedding failed for message %s — skipping Qdrant upsert", message.id
@@ -197,7 +237,7 @@ class QdrantAdapter:
     ) -> list[Memory]:
         """Return K semantically similar past messages for the given chat_id."""
         try:
-            vector = await get_embedding(text=query, model=self._embedding_model)
+            vector = await get_embedding(text=query)
         except Exception:
             logger.exception("Embedding failed for semantic search query")
             return []
@@ -245,15 +285,9 @@ class QdrantAdapter:
         k: int = 4,
         agent_id: str = "",
     ) -> list[str]:
-        """Return K relevant text chunks from the RAG collection.
-
-        The rules collection is already scoped per agent by name (e.g. mab_rules),
-        so agent_id filtering is only applied when chunks have that field.
-        Falls back to an unfiltered search so chunks ingested via the CRM UI
-        (which store doc_name/text without agent_id) are also retrieved.
-        """
+        """Return K relevant text chunks from the RAG collection."""
         try:
-            vector = await get_embedding(text=query, model=self._embedding_model)
+            vector = await get_embedding(text=query)
         except Exception:
             logger.exception("Embedding failed for business rules query")
             return []
@@ -267,7 +301,7 @@ class QdrantAdapter:
                     chunks.append(text)
             return chunks
 
-        # First try: filter by agent_id (chunks stored by the agent's own ingest pipeline)
+        # First try: filter by agent_id
         if agent_id:
             agent_filter = Filter(
                 must=[FieldCondition(key="agent_id", match=MatchValue(value=agent_id))]
@@ -290,7 +324,7 @@ class QdrantAdapter:
                     agent_id,
                 )
 
-        # Fallback: no filter — catches chunks ingested via CRM UI (doc_name/text schema)
+        # Fallback: no filter — catches chunks ingested via CRM UI
         try:
             results = await self._client.search(
                 collection_name=self._rules_collection,
@@ -319,12 +353,9 @@ class QdrantAdapter:
         source: str = "",
         chunk_index: int = 0,
     ) -> None:
-        """
-        Embed and upsert a document chunk into the RAG collection.
-        Called by IngestDocumentsUseCase / scripts/ingest.py.
-        """
+        """Embed and upsert a document chunk into the RAG collection."""
         try:
-            vector = await get_embedding(text=text, model=self._embedding_model)
+            vector = await get_embedding(text=text)
         except Exception:
             logger.exception("Embedding failed for chunk from source=%s", source)
             return
@@ -346,13 +377,7 @@ class QdrantAdapter:
     # ------------------------------------------------------------------
 
     async def list_document_sources(self, agent_id: str) -> list[dict]:
-        """
-        Return a list of unique document sources in the rules collection
-        for the given agent_id, with the chunk count for each.
-
-        Returns:
-            List of dicts: [{"source": str, "chunks": int}, ...]
-        """
+        """Return unique document sources in the rules collection for the given agent_id."""
         agent_filter = Filter(
             must=[FieldCondition(key="agent_id", match=MatchValue(value=agent_id))]
         )
@@ -372,7 +397,6 @@ class QdrantAdapter:
             )
             return []
 
-        # Count chunks per source
         counts: dict[str, int] = {}
         for point in results:
             payload = point.payload or {}
@@ -385,13 +409,7 @@ class QdrantAdapter:
         ]
 
     async def delete_by_source(self, agent_id: str, source_name: str) -> int:
-        """
-        Delete all document chunks from the rules collection that match
-        both agent_id and source_name.
-
-        Returns:
-            Number of points deleted (approximate — Qdrant does not return count).
-        """
+        """Delete all document chunks matching agent_id and source_name."""
         delete_filter = Filter(
             must=[
                 FieldCondition(key="agent_id", match=MatchValue(value=agent_id)),
@@ -409,7 +427,7 @@ class QdrantAdapter:
                 self._rules_collection,
                 agent_id,
             )
-            return 0  # Qdrant delete does not return count
+            return 0
         except Exception:
             logger.exception(
                 "Qdrant delete failed for source='%s' collection=%s agent_id=%s",
