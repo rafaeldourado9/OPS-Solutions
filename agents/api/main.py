@@ -440,9 +440,9 @@ app.include_router(webhook_router, tags=["webhook"])
 @app.post("/set-active/{agent_id}", tags=["admin"])
 async def set_active_agent(agent_id: str) -> dict:
     """
-    Make agent_id the active agent, replacing whoever is currently running.
-    Does not need to know the current agent_id — reads it from the registry.
-    Persists the choice in Redis so container restarts restore it.
+    Set the active agent for this session.
+    Multi-agent: sets session preference without replacing other loaded agents.
+    Single-agent: replaces the running agent (legacy behaviour).
     """
     from fastapi import HTTPException
     registry: AgentRegistry = getattr(app.state, "registry", None)
@@ -453,19 +453,18 @@ async def set_active_agent(agent_id: str) -> dict:
     if not instances:
         raise HTTPException(status_code=503, detail="No agents running")
 
-        # Multi-agent: just set session preference, keep all agents loaded
+    # Multi-agent mode: keep all agents loaded, just set session preference
     if len(instances) > 1:
         target = registry.get_by_agent_id(agent_id)
         if target is None:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail=f'Agent not loaded: {agent_id}')
+            raise HTTPException(status_code=404, detail=f"Agent not loaded: {agent_id}")
         redis = await get_redis()
         await redis.set(f"active_agent_session:{target.session}", agent_id)
         logger.info("Session active agent: %s (session=%s)", agent_id, target.session)
-        return {'status': 'ok', 'agent_id': agent_id, 'name': target.config.agent.name}
+        return {"status": "ok", "agent_id": agent_id, "name": target.config.agent.name}
 
-current = instances[0]  # single-agent mode: always the first one
-
+    # Single-agent mode: replace the running agent
+    current = instances[0]
     get_config.cache_clear()
     new_config = load_config(agent_id)
     new_instance = await build_agent_instance(agent_id, new_config, session=current.session)
@@ -484,9 +483,8 @@ current = instances[0]  # single-agent mode: always the first one
     app.state.process_message = new_instance.process_message
     app.state.media = new_instance.media
 
-    logger.info("Active agent set: %s → %s (session=%s)", current.agent_id, agent_id, current.session)
+    logger.info("Active agent set: %s -> %s (session=%s)", current.agent_id, agent_id, current.session)
     return {"status": "ok", "agent_id": agent_id, "name": new_config.agent.name}
-
 
 @app.post("/load/{agent_id}", tags=["admin"])
 async def load_agent(agent_id: str) -> dict:
