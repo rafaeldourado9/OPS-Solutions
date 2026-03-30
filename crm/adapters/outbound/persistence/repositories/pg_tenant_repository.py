@@ -33,7 +33,7 @@ class PgTenantRepository(TenantRepositoryPort):
                 "timezone": tenant.settings.timezone,
                 "currency": tenant.settings.currency,
                 "locale": tenant.settings.locale,
-                "owned_agents": tenant.owned_agents or [tenant.agent_id],
+                "owned_agents": tenant.owned_agents,
                 "active_config_id": tenant.active_config_id,
             },
             created_at=tenant.created_at,
@@ -65,10 +65,15 @@ class PgTenantRepository(TenantRepositoryPort):
         return self._to_domain(model) if model else None
 
     async def get_by_owned_agent_id(self, agent_id: str) -> Optional[Tenant]:
-        """Find a tenant that owns this agent_id (stored in settings.owned_agents JSON array)."""
-        from sqlalchemy import text
+        """Find a tenant that owns this agent_id (stored in settings.owned_agents JSON array).
+        Uses JSONB containment operator to avoid substring false-positives."""
+        import json
+        from sqlalchemy import cast
+        from sqlalchemy.dialects.postgresql import JSONB
         stmt = select(TenantModel).where(
-            TenantModel.settings["owned_agents"].astext.contains(agent_id)
+            TenantModel.settings["owned_agents"].contains(
+                cast(json.dumps([agent_id]), JSONB)
+            )
         ).limit(1)
         result = await self._session.execute(stmt)
         model = result.scalars().first()

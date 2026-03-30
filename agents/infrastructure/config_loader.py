@@ -210,7 +210,7 @@ def load_config(agent_id: Optional[str] = None) -> BusinessConfig:
     return BusinessConfig.model_validate(interpolated)
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=512)
 def get_config(agent_id: Optional[str] = None) -> BusinessConfig:
     """
     Cached version of load_config.  The cache is keyed by agent_id so that

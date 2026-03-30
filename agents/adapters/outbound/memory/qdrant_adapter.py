@@ -77,30 +77,66 @@ class QdrantAdapter:
     async def ensure_collections(self) -> None:
         """
         Create chat and rules collections if they don't exist yet.
+        Detects dimension mismatch (e.g. old nomic-embed-text 768-dim vs
+        current Gemini 3072-dim) and recreates the collection when empty.
         Safe to call multiple times (idempotent).
         """
         for name in (self._chat_collection, self._rules_collection):
-            exists = await self._collection_exists(name)
-            if not exists:
-                await self._client.create_collection(
-                    collection_name=name,
-                    vectors_config=VectorParams(
-                        size=_EMBEDDING_DIM,
-                        distance=Distance.COSINE,
-                    ),
+            existing_info = None
+            try:
+                existing_info = await self._client.get_collection(name)
+            except Exception:
+                pass  # collection does not exist yet
+
+            if existing_info is not None:
+                try:
+                    existing_size = existing_info.config.params.vectors.size  # type: ignore[union-attr]
+                except Exception:
+                    existing_size = None
+
+                if existing_size == _EMBEDDING_DIM:
+                    continue  # already correct
+
+                try:
+                    count_result = await self._client.count(collection_name=name)
+                    point_count = count_result.count
+                except Exception:
+                    point_count = 1  # assume non-empty to be safe
+
+                if point_count > 0:
+                    logger.warning(
+                        "Qdrant collection '%s' has %d points with %s dims "
+                        "(expected %d). Old embeddings are incompatible with "
+                        "Gemini — re-upload RAG documents to rebuild this collection.",
+                        name, point_count, existing_size, _EMBEDDING_DIM,
+                    )
+                    continue  # leave non-empty collection untouched
+
+                logger.info(
+                    "Recreating empty Qdrant collection '%s' (%s->%d dims)",
+                    name, existing_size, _EMBEDDING_DIM,
                 )
-                # Create payload index on chat_id / agent_id for fast filtering
-                await self._client.create_payload_index(
-                    collection_name=name,
-                    field_name="chat_id",
-                    field_schema=PayloadSchemaType.KEYWORD,
-                )
-                await self._client.create_payload_index(
-                    collection_name=name,
-                    field_name="agent_id",
-                    field_schema=PayloadSchemaType.KEYWORD,
-                )
-                logger.info("Created Qdrant collection: %s", name)
+                await self._client.delete_collection(name)
+
+            await self._client.create_collection(
+                collection_name=name,
+                vectors_config=VectorParams(
+                    size=_EMBEDDING_DIM,
+                    distance=Distance.COSINE,
+                ),
+            )
+            # Create payload index on chat_id / agent_id for fast filtering
+            await self._client.create_payload_index(
+                collection_name=name,
+                field_name="chat_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+            await self._client.create_payload_index(
+                collection_name=name,
+                field_name="agent_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+            logger.info("Created Qdrant collection: %s", name)
 
     async def _collection_exists(self, name: str) -> bool:
         try:

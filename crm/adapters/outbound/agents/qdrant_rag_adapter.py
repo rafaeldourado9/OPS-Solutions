@@ -1,13 +1,15 @@
 """
-QdrantRagAdapter — manages RAG documents via Qdrant REST API + Ollama embeddings.
+QdrantRagAdapter — manages RAG documents via Qdrant REST API + Gemini embeddings.
 
 Uses httpx directly (no qdrant-client dependency) for clean separation.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -19,32 +21,82 @@ from infrastructure.config import settings
 
 logger = structlog.get_logger()
 
-_VECTOR_SIZE = 768  # nomic-embed-text
+_VECTOR_SIZE = 3072  # gemini-embedding-001
+_GEMINI_EMBED_MODEL = "models/gemini-embedding-001"
+_GEMINI_EMBED_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "gemini-embedding-001:embedContent?key={key}"
+)
+
+
+def _read_gemini_key() -> str:
+    """Read Gemini API key from shared file (written by Settings > Integrations),
+    Never falls back to env — the key must be configured by the tenant."""
+    agents_dir = os.environ.get("AGENTS_DIR", "/app/shared-agents")
+    key_file = Path(agents_dir) / ".gemini_key"
+    try:
+        key = key_file.read_text().strip()
+        if key:
+            return key
+    except Exception:
+        pass
+    return ""
 
 
 class QdrantRagAdapter(RagDocumentPort):
 
-    def __init__(
-        self,
-        qdrant_url: str | None = None,
-        ollama_url: str | None = None,
-    ) -> None:
+    def __init__(self, qdrant_url: str | None = None) -> None:
         self._qdrant = (qdrant_url or settings.qdrant_url).rstrip("/")
-        self._ollama = (ollama_url or "http://ollama:11434").rstrip("/")
         self._client = httpx.AsyncClient(timeout=60.0)
 
     async def _get_embedding(self, text: str) -> list[float]:
+        api_key = _read_gemini_key()
+        if not api_key:
+            raise ValueError(
+                "Gemini API key not configured. "
+                "Go to Settings → Integrations and save your Gemini key."
+            )
         resp = await self._client.post(
-            f"{self._ollama}/api/embeddings",
-            json={"model": "nomic-embed-text", "prompt": text},
+            _GEMINI_EMBED_URL.format(key=api_key),
+            json={
+                "model": _GEMINI_EMBED_MODEL,
+                "content": {"parts": [{"text": text}]},
+            },
         )
         resp.raise_for_status()
-        return resp.json()["embedding"]
+        return resp.json()["embedding"]["values"]
 
     async def _ensure_collection(self, collection: str) -> None:
         check = await self._client.get(f"{self._qdrant}/collections/{collection}")
         if check.status_code == 200:
-            return
+            # Verify vector size matches — recreate if different (e.g. migrated from 768)
+            existing_size = (
+                check.json()
+                .get("result", {})
+                .get("config", {})
+                .get("params", {})
+                .get("vectors", {})
+                .get("size")
+            )
+            if existing_size == _VECTOR_SIZE:
+                return
+            # Wrong dimensions — delete and recreate (only safe when collection is empty)
+            count_resp = await self._client.post(
+                f"{self._qdrant}/collections/{collection}/points/count",
+                json={},
+            )
+            count = count_resp.json().get("result", {}).get("count", 1) if count_resp.status_code == 200 else 1
+            if count > 0:
+                logger.warning(
+                    "rag_collection_dim_mismatch",
+                    collection=collection,
+                    existing=existing_size,
+                    expected=_VECTOR_SIZE,
+                    points=count,
+                )
+                return  # Don't touch a collection with existing data
+            await self._client.delete(f"{self._qdrant}/collections/{collection}")
+
         resp = await self._client.put(
             f"{self._qdrant}/collections/{collection}",
             json={"vectors": {"size": _VECTOR_SIZE, "distance": "Cosine"}},
@@ -103,6 +155,9 @@ class QdrantRagAdapter(RagDocumentPort):
         for chunk in text_chunks:
             try:
                 vector = await self._get_embedding(chunk)
+            except ValueError:
+                # Configuration errors (missing key) must propagate immediately
+                raise
             except Exception as e:
                 logger.warning("embedding_failed", chunk_preview=chunk[:50], error=str(e))
                 continue
