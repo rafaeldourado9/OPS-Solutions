@@ -871,6 +871,12 @@ async def waha_webhook(request: Request) -> dict[str, str]:
         if stored:
             instance = registry.get_by_agent_id(stored)
         if not stored or instance is None:
+            # Check session-level active agent set by CRM operator switch
+            session_active = await _redis.get(factive_agent_session:{session_name})
+            if session_active:
+                sid = session_active.decode() if isinstance(session_active, bytes) else session_active
+                instance = registry.get_by_agent_id(sid)
+        if instance is None:
             instance = registry.get_by_session_and_phone(session_name, chat_id)
         if instance is None:
             logger.warning("No agent for session=%s", session_name)

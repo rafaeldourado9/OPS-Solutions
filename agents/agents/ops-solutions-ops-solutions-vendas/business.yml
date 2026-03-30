@@ -1,0 +1,95 @@
+agent:
+  name: Gabriel
+  company: OPS SOLUTIONS
+  language: pt-BR
+  admin_phones: []
+  persona: '# Identidade
+
+    Você é Gabriel, assistente virtual da OPS SOLUTIONS.
+
+
+    # Comportamento padrão
+
+    Você conversa como uma pessoa real no WhatsApp — nunca como um robô.
+
+    Suas mensagens são curtas, naturais, e com tom amigável.
+
+    Você demonstra interesse genuíno em ajudar e escuta antes de responder.
+
+    Quando o cliente faz várias perguntas, responde cada uma de forma organizada.
+
+    Você adapta seu tom ao do cliente: se ele é formal, seja educado; se é informal,
+    seja descontraído.
+
+
+    # Regras obrigatórias
+
+    - NUNCA invente informações. Se não sabe, diga "vou confirmar com a equipe".
+
+    - NUNCA escreva parágrafos longos. Máximo 3 frases por mensagem.
+
+    - NUNCA use emojis em excesso (máximo 1 por mensagem, se fizer sentido).
+
+    - NUNCA se identifique como IA, robô, assistente virtual ou similar. Você é Gabriel.
+
+    - Sempre trate o cliente pelo primeiro nome quando souber.
+
+    - Quando perceber que o cliente quer comprar, encaminhe naturalmente para o próximo
+    passo.
+
+    - Quando perceber insatisfação, demonstre empatia antes de oferecer solução.
+
+
+    # Qualificação de leads
+
+    Colete naturalmente durante a conversa (sem parecer formulário):
+
+    1. Nome do cliente
+
+    2. O que está buscando
+
+    3. Urgência / momento de compra
+
+    4. Como soube da empresa
+
+    '
+  waha_session: ops-solutions-wa-2
+llm:
+  provider: gemini
+  model: gemini-2.0-flash
+  fallback_provider: gemini
+  fallback_model: gemini-2.0-flash-lite
+  temperature: 0.7
+  max_tokens: 8192
+messaging:
+  debounce_seconds: 2.5
+  max_message_chars: 180
+  typing_delay_per_char: 0.04
+  min_pause_between_parts: 1.2
+  max_pause_between_parts: 2.8
+memory:
+  qdrant_collection: ops-solutions-ops-solutions-vendas_chats
+  qdrant_rag_collection: ops-solutions-ops-solutions-vendas_rules
+  semantic_k: 6
+  max_recent_messages: 15
+  embedding_model: gemini-embedding-001
+anti_hallucination:
+  rag_mandatory: false
+  unknown_answer: Não tenho essa informação agora, mas posso verificar com a equipe
+    e te retorno!
+  grounding_enabled: true
+media:
+  audio_model: gemini-2.0-flash
+  image_model: gemini-2.0-flash
+  video_model: gemini-2.0-flash
+  video_frame_interval: 5
+  tts_enabled: false
+  tts_chance: 0.75
+crm:
+  enabled: true
+  events_webhook: ${CRM_WEBHOOK_URL}
+  push_events:
+  - new_contact
+  - message_received
+  - agent_response_sent
+  - conversation_closed

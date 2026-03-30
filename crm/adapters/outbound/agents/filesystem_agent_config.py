@@ -81,7 +81,7 @@ class FilesystemAgentConfigAdapter(AgentConfigPort):
                 },
                 "llm": {"provider": "gemini", "model": "gemini-2.0-flash", "api_key": "${GEMINI_API_KEY}", "temperature": 0.7, "max_tokens": 8192},
                 "messaging": {"debounce_seconds": 2.5, "max_message_chars": 180, "typing_delay_per_char": 0.04, "min_pause_between_parts": 1.2, "max_pause_between_parts": 2.8},
-                "memory": {"qdrant_collection": f"{agent_id}_chats", "qdrant_rag_collection": f"{agent_id}_rules", "semantic_k": 6, "max_recent_messages": 15, "embedding_model": "nomic-embed-text"},
+                "memory": {"qdrant_collection": f"{agent_id}_chats", "qdrant_rag_collection": f"{agent_id}_rules", "semantic_k": 6, "max_recent_messages": 15, "embedding_model": "gemini-embedding-001"},
                 "anti_hallucination": {"rag_mandatory": False, "unknown_answer": "Não tenho essa informação no momento, mas posso verificar com nossa equipe!", "grounding_enabled": True},
                 "media": {"audio_model": "gemini-2.0-flash", "image_model": "gemini-2.0-flash", "video_model": "gemini-2.0-flash", "video_frame_interval": 5, "tts_enabled": False, "tts_voice": "Puck", "tts_chance": 0.5},
                 "crm": {"enabled": True, "events_webhook": "${CRM_WEBHOOK_URL}", "push_events": ["new_contact", "message_received", "agent_response_sent", "conversation_closed"]},

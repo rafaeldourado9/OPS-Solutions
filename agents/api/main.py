@@ -453,7 +453,18 @@ async def set_active_agent(agent_id: str) -> dict:
     if not instances:
         raise HTTPException(status_code=503, detail="No agents running")
 
-    current = instances[0]  # single-agent mode: always the first one
+        # Multi-agent: just set session preference, keep all agents loaded
+    if len(instances) > 1:
+        target = registry.get_by_agent_id(agent_id)
+        if target is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f'Agent not loaded: {agent_id}')
+        redis = await get_redis()
+        await redis.set(f"active_agent_session:{target.session}", agent_id)
+        logger.info("Session active agent: %s (session=%s)", agent_id, target.session)
+        return {'status': 'ok', 'agent_id': agent_id, 'name': target.config.agent.name}
+
+current = instances[0]  # single-agent mode: always the first one
 
     get_config.cache_clear()
     new_config = load_config(agent_id)
@@ -465,7 +476,7 @@ async def set_active_agent(agent_id: str) -> dict:
         registry.replace_agent(current.agent_id, new_instance)
 
     redis = await get_redis()
-    await redis.set(f"active_agent:{current.session}", agent_id)
+    await redis.set(f"active_agent_session:{current.session}", agent_id)
 
     app.state.agent_id = agent_id
     app.state.config = new_config
