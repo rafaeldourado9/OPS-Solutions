@@ -211,7 +211,8 @@ async def lifespan(app: FastAPI):
             instance = await build_agent_instance(agent_id, config, session=session_override)
             registry.register(instance)
 
-            # Check Redis for a persisted agent switch — restore it so restarts don't revert
+            # Single-agent restore: only runs when one agent is configured
+            saved = await redis_startup.get(f"active_agent:{instance.session}") if len(agent_ids) == 1 else None
             saved = await redis_startup.get(f"active_agent:{instance.session}")
             if saved:
                 saved_id = saved.decode() if isinstance(saved, bytes) else saved
