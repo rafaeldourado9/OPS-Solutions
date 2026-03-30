@@ -106,7 +106,6 @@ services:
       - "8000:8000"
     environment:
       - AGENT_IDS=${AGENT_IDS:-auto}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SHARED_GEMINI_KEY_FILE=/app/agents/.gemini_key
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
@@ -203,7 +202,6 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
       - QDRANT_URL=http://qdrant:6333
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - SMTP_HOST=${SMTP_HOST:-smtp-relay.brevo.com}
       - SMTP_PORT=${SMTP_PORT:-587}
