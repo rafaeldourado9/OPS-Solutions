@@ -65,7 +65,7 @@ async def _process_tenant(session, mailer: SmtpEmailAdapter, tenant) -> None:
     delta = tenant.trial_ends_at - now
     days_remaining = max(int(delta.total_seconds() / 86400), 0)
 
-    current_settings = dict(tenant.raw_settings or {})
+    current_settings = dict(tenant.settings or {})
     sent: list[str] = list(current_settings.get("trial_reminders_sent", []))
 
     # Determine which milestone applies right now

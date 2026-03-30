@@ -44,26 +44,48 @@ class ReceiveAgentEventUseCase:
         else:
             logger.warning("unknown_agent_event_type", event_type=event.event_type)
 
-        # Forward event to tenant's configured webhook URL (fire-and-forget)
-        asyncio.create_task(self._forward_to_webhook(event))
-
-    async def _forward_to_webhook(self, event: InboundAgentEvent) -> None:
+        # Resolve webhook URL NOW while the DB session is still open.
+        # asyncio.create_task runs after the request handler returns (session already
+        # committed), so we must NOT use self._tenant_repo inside the background task.
+        webhook_url = ""
+        tenant_id_str = ""
         try:
             tenant = await self._tenant_repo.get_by_agent_id(event.agent_id)
-            if not tenant:
-                return
-            webhook_url = (tenant.raw_settings or {}).get("integrations", {}).get("webhook_url", "")
-            if not webhook_url:
-                return
+            if tenant:
+                webhook_url = (tenant.raw_settings or {}).get("integrations", {}).get("webhook_url", "")
+                tenant_id_str = str(tenant.id)
+        except Exception:
+            logger.warning("webhook_tenant_lookup_failed", agent_id=event.agent_id)
+
+        if webhook_url:
+            asyncio.create_task(self._forward_to_webhook(event, webhook_url, tenant_id_str))
+
+    async def _forward_to_webhook(
+        self,
+        event: InboundAgentEvent,
+        webhook_url: str,
+        tenant_id: str,
+    ) -> None:
+        """Fire-and-forget: POST event to tenant's configured webhook URL.
+
+        NOTE: runs in a background task — must NOT use DB session (already committed).
+        All data must be passed as arguments.
+        """
+        try:
             payload = {
                 "event_type": event.event_type,
                 "chat_id": event.chat_id,
                 "agent_id": event.agent_id,
-                "tenant_id": str(tenant.id),
+                "tenant_id": tenant_id,
                 "data": event.data,
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(webhook_url, json=payload)
-                logger.info("webhook_forwarded", url=webhook_url, event_type=event.event_type, status=resp.status_code)
+                logger.info(
+                    "webhook_forwarded",
+                    url=webhook_url,
+                    event_type=event.event_type,
+                    status=resp.status_code,
+                )
         except Exception:
             logger.exception("webhook_forward_failed", agent_id=event.agent_id)
