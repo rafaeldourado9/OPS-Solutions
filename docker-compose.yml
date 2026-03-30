@@ -106,6 +106,7 @@ services:
       - "8000:8000"
     environment:
       - AGENT_IDS=${AGENT_IDS:-auto}
+      - TENANT_ID=e3ea8593-2a2d-4d59-a9c1-564c7a64bf58
       - SHARED_GEMINI_KEY_FILE=/app/agents/.gemini_key
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333

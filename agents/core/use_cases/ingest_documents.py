@@ -87,9 +87,17 @@ async def _describe_image(path: Path, config: BusinessConfig) -> str:
     """
     import google.generativeai as genai
 
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    # Read key from shared file written by CRM Settings (never from env)
+    from pathlib import Path as _Path
+    _key_file = _Path(os.environ.get("SHARED_GEMINI_KEY_FILE", "/app/shared-agents/.gemini_key"))
+    api_key = ""
+    try:
+        if _key_file.exists():
+            api_key = _key_file.read_text().strip()
+    except Exception:
+        pass
     if not api_key:
-        logger.warning("GEMINI_API_KEY not set — skipping image description for RAG")
+        logger.warning("Gemini key not configured — skipping image description for RAG")
         return f"[Imagem: {path.name}]"
 
     genai.configure(api_key=api_key)

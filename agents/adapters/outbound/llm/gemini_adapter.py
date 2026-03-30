@@ -67,12 +67,11 @@ class GeminiAdapter(LLMPort):
         api_key: Optional[str] = None,
         circuit_breaker: Optional[CircuitBreaker] = None,
     ) -> None:
-        # Resolve initial key: shared file > argument > env var
-        resolved_key = _read_shared_key() or api_key or os.environ.get("GEMINI_API_KEY", "")
+        # Resolve initial key: shared file only (key is written by CRM Settings)
+        resolved_key = _read_shared_key() or api_key or ""
         if not resolved_key:
             raise ValueError(
-                "Gemini API key is required. Set GEMINI_API_KEY env var, pass api_key, "
-                "or write the key to the shared file."
+                "Gemini API key not configured. Go to Settings -> Integrations and add your Gemini key."
             )
         self._api_key = resolved_key
         genai.configure(api_key=resolved_key)
@@ -90,7 +89,7 @@ class GeminiAdapter(LLMPort):
         Check shared file for a newer key.  If changed, reconfigure genai
         and reset the circuit breaker so the new key gets a clean slate.
         """
-        latest = _read_shared_key() or os.environ.get("GEMINI_API_KEY", "")
+        latest = _read_shared_key()
         if latest and latest != self._api_key:
             logger.info("Gemini API key updated from shared file — reconfiguring and resetting circuit breaker")
             self._api_key = latest

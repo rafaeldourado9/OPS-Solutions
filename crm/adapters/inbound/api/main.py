@@ -113,14 +113,21 @@ async def sync_agent_manifest():
             )
             tenants = result.scalars().all()
 
-        # Collect all agent IDs owned by active tenants
-        unique = list(dict.fromkeys(
-            agent_id
-            for t in tenants
-            for agent_id in ((t.settings or {}).get("owned_agents") or [t.agent_id])
-        ))
+        agents_dir = Path(settings.agents_dir)
 
-        manifest_path = Path(settings.agents_dir) / "active-agents.json"
+        # Write per-tenant manifest files — each tenant only loads its own agents
+        all_agents: list[str] = []
+        for t in tenants:
+            owned = (t.settings or {}).get("owned_agents") or ([t.agent_id] if t.agent_id else [])
+            owned = [a for a in owned if a]  # filter empty
+            # Per-tenant manifest keyed by tenant ID
+            per_tenant = agents_dir / f"active-agents-{t.id}.json"
+            per_tenant.write_text(json.dumps(owned), encoding="utf-8")
+            all_agents.extend(owned)
+
+        # Global manifest (backward compat / unfiltered deployments)
+        unique = list(dict.fromkeys(all_agents))
+        manifest_path = agents_dir / "active-agents.json"
         manifest_path.write_text(json.dumps(unique), encoding="utf-8")
         logger.info("agent_manifest_synced", agents=unique, count=len(unique))
     except Exception as e:

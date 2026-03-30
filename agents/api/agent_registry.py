@@ -103,12 +103,11 @@ class AgentRegistry:
 
         if not candidates:
             all_inst = list(self._by_agent_id.values())
+            # Single-agent shortcut: only safe when exactly one agent is loaded
+            # (i.e. per-tenant deployment). Never fall back across different sessions.
             if len(all_inst) == 1:
                 return all_inst[0]
-            if session == "default" and self._by_session:
-                candidates = next(iter(self._by_session.values()))
-            else:
-                return None
+            return None
 
         phone = _normalize_phone(chat_id)
 
@@ -158,8 +157,6 @@ class AgentRegistry:
         all_inst = list(self._by_agent_id.values())
         if len(all_inst) == 1:
             return all_inst[0]
-        if session == "default" and self._by_session:
-            return next(iter(self._by_session.values()))[0]
         return None
 
     def replace(self, new_instance: AgentInstance) -> bool:

@@ -116,6 +116,21 @@ def _auto_discover_agents() -> list[str]:
     agents_path = _agents_dir()
     manifest = agents_path / "active-agents.json"
 
+    # If TENANT_ID is set, load only that tenant's agents (strict isolation)
+    tenant_id = os.environ.get("TENANT_ID", "").strip()
+    if tenant_id:
+        per_tenant_manifest = agents_path / f"active-agents-{tenant_id}.json"
+        if per_tenant_manifest.exists():
+            try:
+                agent_ids = _json.loads(per_tenant_manifest.read_text(encoding="utf-8"))
+                valid = [a for a in agent_ids if (agents_path / a / "business.yml").exists()]
+                logger.info(
+                    "Loaded %d agents for tenant %s: %s", len(valid), tenant_id, valid
+                )
+                return valid
+            except Exception as exc:
+                logger.warning("Failed to read per-tenant manifest — falling back: %s", exc)
+
     if manifest.exists():
         try:
             agent_ids = _json.loads(manifest.read_text(encoding="utf-8"))
