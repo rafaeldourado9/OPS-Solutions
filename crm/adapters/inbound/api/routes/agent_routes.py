@@ -97,18 +97,25 @@ async def update_agent_config(
     from infrastructure.config import settings
 
     async def _fire_reload():
+        import structlog as _structlog
+        _logger = _structlog.get_logger()
         try:
-            # Get the tenant's agent_id by reading from the DB (same session approach)
             from adapters.outbound.persistence.database import async_session_factory
             from adapters.outbound.persistence.repositories.pg_tenant_repository import PgTenantRepository
             async with async_session_factory() as s:
                 repo = PgTenantRepository(s)
                 tenant = await repo.get_by_id(current_user.tenant_id)
-                if tenant and tenant.agent_id:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
-                        await client.post(f"{settings.agents_api_url}/reload/{tenant.agent_id}")
-        except Exception:
-            pass  # Fire-and-forget: log silently, never block the save response
+                if tenant:
+                    active_id = tenant.get_active_agent_id()
+                    if active_id:
+                        async with httpx.AsyncClient(timeout=5.0) as client:
+                            resp = await client.post(f"{settings.agents_api_url}/reload/{active_id}")
+                            if resp.status_code >= 400:
+                                _logger.warning("agent_reload_failed", agent_id=active_id, status=resp.status_code, body=resp.text[:200])
+                            else:
+                                _logger.info("agent_reload_ok", agent_id=active_id)
+        except Exception as exc:
+            _logger.warning("agent_reload_error", error=str(exc))  # Fire-and-forget: log, never block save
 
     asyncio.create_task(_fire_reload())
     return result

@@ -82,6 +82,7 @@ class CircuitBreaker:
         self,
         func: Callable[..., Awaitable[Any]],
         *args: Any,
+        excluded_exceptions: tuple[type[BaseException], ...] = (),
         **kwargs: Any,
     ) -> Any:
         """
@@ -89,6 +90,8 @@ class CircuitBreaker:
 
         Raises CircuitOpenError if the circuit is open and not yet recovered.
         Propagates the original exception on failure (after updating state).
+        Exceptions listed in `excluded_exceptions` are re-raised without
+        counting as a failure (e.g. rate limits that should not trip the breaker).
         """
         await self._check_state()
 
@@ -96,6 +99,8 @@ class CircuitBreaker:
             result = await func(*args, **kwargs)
             await self._on_success()
             return result
+        except excluded_exceptions:
+            raise  # Don't count excluded exceptions (e.g. 429) as circuit failures
         except Exception:
             await self._on_failure()
             raise

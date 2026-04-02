@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 # Path where the CRM writes the Gemini API key at runtime.
 _SHARED_KEY_FILE = Path(os.environ.get("SHARED_GEMINI_KEY_FILE", "/app/shared-agents/.gemini_key"))
 
+
+class _RateLimitError(Exception):
+    """Sentinel for Gemini 429 — must NOT trip the circuit breaker."""
+
 _default_breaker = CircuitBreaker(
     name="gemini",
     failure_threshold=3,
@@ -142,7 +146,10 @@ class GeminiAdapter(LLMPort):
     ) -> AsyncIterator[str]:
         """Stream response chunks from Gemini, protected by circuit breaker."""
         self._refresh_key()
-        response_text = await self._breaker.call(self.generate, messages, system)
+        response_text = await self._breaker.call(
+            self.generate, messages, system,
+            excluded_exceptions=(_RateLimitError,),
+        )
         yield response_text
 
     async def generate(
@@ -174,7 +181,14 @@ class GeminiAdapter(LLMPort):
                     finish = response.candidates[0].finish_reason
                 logger.warning("Gemini response blocked/empty for model=%s finish_reason=%s", self._model_name, finish)
                 return ""
-        except Exception:
+        except Exception as exc:
+            # 429 Resource Exhausted is a rate-limit, not a service failure —
+            # don't count it against the circuit breaker; raise a sentinel so
+            # stream_response / callers can skip the breaker failure counter.
+            exc_str = str(exc)
+            if "429" in exc_str or "ResourceExhausted" in type(exc).__name__ or "Resource exhausted" in exc_str:
+                logger.warning("Gemini rate limit (429) for model=%s — skipping circuit breaker", self._model_name)
+                raise _RateLimitError(exc_str) from exc
             logger.exception("Gemini generate failed for model=%s", self._model_name)
             raise
 
