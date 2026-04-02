@@ -2,8 +2,8 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowRight, ArrowLeft, Check, Robot, Key,
-  WhatsappLogo, SpinnerGap, Eye, EyeSlash,
+  ArrowRight, ArrowLeft, Check, Robot,
+  WhatsappLogo, SpinnerGap,
   Buildings, IdentificationBadge,
 } from '@phosphor-icons/react'
 import { useAuthStore } from '../../store/authStore'
@@ -31,8 +31,6 @@ export default function OnboardingWizardPage() {
   // Step 1 — Agent
   const [agentName, setAgentName] = useState('')
   const [persona, setPersona] = useState('')
-  const [showKey, setShowKey] = useState(false)
-  const [geminiKey, setGeminiKey] = useState('')
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const saveCompany = useMutation({
@@ -51,10 +49,7 @@ export default function OnboardingWizardPage() {
 
   const createAgentAndSaveKey = useMutation({
     mutationFn: async () => {
-      // 1. Save Gemini key
-      await settingsApi.updateIntegrations({ gemini_api_key: geminiKey })
-
-      // 2. Create agent instance
+      // 1. Create agent instance
       const id = (agentName || tenant?.name || 'agente')
         .toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -100,7 +95,6 @@ export default function OnboardingWizardPage() {
     } else if (step === 1) {
       if (!agentName.trim()) { toast.error('Dê um nome ao seu assistente'); return }
       if (!persona.trim()) { toast.error('Descreva como o agente deve se comportar'); return }
-      if (!geminiKey.trim()) { toast.error('A chave Gemini é necessária para ativar o assistente'); return }
       createAgentAndSaveKey.mutate()
     } else if (step === 2) {
       if (tenant?.id) localStorage.setItem(`onboarding_${tenant.id}`, 'done')
@@ -258,48 +252,7 @@ export default function OnboardingWizardPage() {
                   </p>
                 </div>
 
-                {/* Gemini API Key */}
-                <div className="pt-3 border-t border-zinc-100">
-                  <div className="flex items-start gap-4 p-4 rounded-xl bg-zinc-50 border border-zinc-100 mb-4">
-                    <Key size={18} weight="duotone" className="text-zinc-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-zinc-700 mb-2">Como obter a chave gratuitamente:</p>
-                      <ol className="space-y-1.5">
-                        {[
-                          'Acesse aistudio.google.com',
-                          'Faça login com sua conta Google',
-                          'Clique em "Get API key" → "Create API key"',
-                          'Copie a chave e cole abaixo',
-                        ].map((t, i) => (
-                          <li key={i} className="flex items-center gap-2 text-xs text-zinc-500">
-                            <span className="w-4 h-4 rounded-full bg-white border border-zinc-200 flex items-center justify-center text-[9px] font-bold text-zinc-500 shrink-0">{i + 1}</span>
-                            {t}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  </div>
 
-                  <label className="block text-xs font-semibold text-zinc-600 mb-1.5">Gemini API Key</label>
-                  <div className="relative">
-                    <input
-                      type={showKey ? 'text' : 'password'}
-                      value={geminiKey}
-                      onChange={e => setGeminiKey(e.target.value)}
-                      placeholder="AIzaSy..."
-                      autoComplete="off"
-                      className="w-full border border-zinc-200 rounded-xl px-4 py-2.5 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#0ABAB5]/30 focus:border-[#0ABAB5] transition-all placeholder:text-zinc-400 pr-12 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(v => !v)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors"
-                    >
-                      {showKey ? <EyeSlash size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-1.5">Armazenada com segurança no servidor. Nunca exposta no navegador.</p>
-                </div>
               </div>
             </div>
           )}

@@ -63,7 +63,8 @@ def _read_gemini_key() -> str:
             return key
     except Exception:
         pass
-    return ""
+    # fallback: GEMINI_API_KEY env var
+    return os.environ.get("GEMINI_API_KEY", "")
 
 
 async def get_embedding(text: str, model: str = "") -> list[float]:

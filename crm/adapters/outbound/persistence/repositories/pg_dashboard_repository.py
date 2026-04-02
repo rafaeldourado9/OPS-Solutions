@@ -8,25 +8,13 @@ from adapters.outbound.persistence.models.conversation_model import Conversation
 from adapters.outbound.persistence.models.customer_model import CustomerModel
 from adapters.outbound.persistence.models.lead_model import LeadModel
 from adapters.outbound.persistence.models.message_model import CRMMessageModel
-from adapters.outbound.persistence.models.product_model import ProductModel
-from adapters.outbound.persistence.models.quote_model import QuoteModel
 from core.ports.outbound.dashboard_repository import (
     ConversationMetrics,
     DashboardRepositoryPort,
-    InventoryAlert,
     KPIData,
     RevenueDataPoint,
     SalesFunnelStage,
 )
-
-
-def _compute_quote_total(model: QuoteModel) -> float:
-    items_total = sum(
-        d["quantity"] * d["unit_price"] * (1 - d.get("discount", 0.0) / 100)
-        for d in (model.items_json or [])
-    )
-    premises_total = sum(d["amount"] for d in (model.applied_premises_json or []))
-    return items_total + premises_total
 
 
 class PgDashboardRepository(DashboardRepositoryPort):
@@ -89,15 +77,15 @@ class PgDashboardRepository(DashboardRepositoryPort):
         )
         pipeline_value = pipeline_result.scalar() or 0.0
 
-        # Revenue from approved quotes in period
-        quotes_result = await self._session.execute(
-            select(QuoteModel).where(
-                QuoteModel.tenant_id == tenant_id,
-                QuoteModel.status == "approved",
-                QuoteModel.updated_at >= since,
+        # Revenue from won leads in period
+        revenue_result = await self._session.execute(
+            select(func.coalesce(func.sum(LeadModel.value), 0.0)).where(
+                LeadModel.tenant_id == tenant_id,
+                LeadModel.stage == "won",
+                LeadModel.closed_at >= since,
             )
         )
-        total_revenue = sum(_compute_quote_total(q) for q in quotes_result.scalars().all())
+        total_revenue = float(revenue_result.scalar() or 0.0)
 
         # Conversations
         active_conversations = await self._scalar(
@@ -113,16 +101,6 @@ class PgDashboardRepository(DashboardRepositoryPort):
             )
         )
 
-        # Low stock
-        low_stock_products = await self._scalar(
-            select(func.count()).where(
-                ProductModel.tenant_id == tenant_id,
-                ProductModel.is_active == True,
-                ProductModel.min_stock_alert > 0,
-                ProductModel.stock_quantity <= ProductModel.min_stock_alert,
-            )
-        )
-
         return KPIData(
             total_customers=total_customers,
             new_customers=new_customers,
@@ -135,7 +113,6 @@ class PgDashboardRepository(DashboardRepositoryPort):
             pipeline_value=round(float(pipeline_value), 2),
             active_conversations=active_conversations,
             takeover_active=takeover_active,
-            low_stock_products=low_stock_products,
         )
 
     # ------------------------------------------------------------------
@@ -192,16 +169,16 @@ class PgDashboardRepository(DashboardRepositoryPort):
             month_start = row.month_start
             month_end = row.month_end
 
-            # Revenue: approved quotes updated in this month
-            quotes_result = await self._session.execute(
-                select(QuoteModel).where(
-                    QuoteModel.tenant_id == tenant_id,
-                    QuoteModel.status == "approved",
-                    QuoteModel.updated_at >= month_start,
-                    QuoteModel.updated_at < month_end,
+            # Revenue: won leads closed in this month
+            revenue_result = await self._session.execute(
+                select(func.coalesce(func.sum(LeadModel.value), 0.0)).where(
+                    LeadModel.tenant_id == tenant_id,
+                    LeadModel.stage == "won",
+                    LeadModel.closed_at >= month_start,
+                    LeadModel.closed_at < month_end,
                 )
             )
-            revenue = sum(_compute_quote_total(q) for q in quotes_result.scalars().all())
+            revenue = float(revenue_result.scalar() or 0.0)
 
             # New customers
             new_customers = await self._scalar(
@@ -280,30 +257,6 @@ class PgDashboardRepository(DashboardRepositoryPort):
             takeover_sessions_period=takeover_sessions,
             avg_messages_per_conversation=avg_messages,
         )
-
-    # ------------------------------------------------------------------
-    # Inventory Alerts
-    # ------------------------------------------------------------------
-
-    async def get_inventory_alerts(self, tenant_id: UUID) -> list[InventoryAlert]:
-        result = await self._session.execute(
-            select(ProductModel).where(
-                ProductModel.tenant_id == tenant_id,
-                ProductModel.is_active == True,
-                ProductModel.min_stock_alert > 0,
-                ProductModel.stock_quantity <= ProductModel.min_stock_alert,
-            ).order_by(ProductModel.stock_quantity.asc())
-        )
-        return [
-            InventoryAlert(
-                product_id=str(p.id),
-                product_name=p.name,
-                sku=p.sku,
-                stock_quantity=p.stock_quantity,
-                min_stock_alert=p.min_stock_alert,
-            )
-            for p in result.scalars().all()
-        ]
 
     # ------------------------------------------------------------------
     # Helpers

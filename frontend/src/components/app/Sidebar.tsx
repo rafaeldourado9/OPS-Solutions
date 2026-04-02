@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
   SquaresFour, Users, Kanban, ChatCircleDots,
-  FileText, Scales, Handshake, Package, FileDoc,
   Robot, Gear, SignOut, Question, X
 } from '@phosphor-icons/react'
 import { useAuthStore } from '../../store/authStore'
@@ -11,11 +10,6 @@ const ALL_NAV: { to: string; icon: React.ElementType; label: string }[] = [
   { to: '/app/customers',     icon: Users,         label: 'Clientes'        },
   { to: '/app/leads',         icon: Kanban,        label: 'Leads'           },
   { to: '/app/conversations', icon: ChatCircleDots,label: 'Conversas'       },
-  { to: '/app/quotes',        icon: FileText,      label: 'Orçamentos'      },
-  { to: '/app/premises',      icon: Scales,        label: 'Premissas'       },
-  { to: '/app/contracts',     icon: Handshake,     label: 'Contratos'       },
-  { to: '/app/inventory',     icon: Package,       label: 'Estoque'         },
-  { to: '/app/templates',     icon: FileDoc,       label: 'Templates'       },
   { to: '/app/agents',        icon: Robot,         label: 'Agente IA'       },
   { to: '/app/settings',      icon: Gear,          label: 'Configurações'   },
 ]

@@ -3,7 +3,6 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
-import TrialBanner from './TrialBanner'
 import { useAuthStore } from '../../store/authStore'
 
 export default function AppLayout() {
@@ -52,7 +51,6 @@ export default function AppLayout() {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 lg:ml-0">
-        <TrialBanner />
         <TopBar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto page-enter pb-20 lg:pb-0">
           <Outlet />

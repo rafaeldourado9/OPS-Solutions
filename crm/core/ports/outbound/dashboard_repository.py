@@ -17,7 +17,6 @@ class KPIData:
     pipeline_value: float
     active_conversations: int
     takeover_active: int
-    low_stock_products: int
 
 
 @dataclass
@@ -45,15 +44,6 @@ class ConversationMetrics:
     avg_messages_per_conversation: float
 
 
-@dataclass
-class InventoryAlert:
-    product_id: str
-    product_name: str
-    sku: str
-    stock_quantity: float
-    min_stock_alert: float
-
-
 class DashboardRepositoryPort(ABC):
 
     @abstractmethod
@@ -72,6 +62,3 @@ class DashboardRepositoryPort(ABC):
     async def get_conversation_metrics(self, tenant_id: UUID, since: datetime) -> ConversationMetrics:
         ...
 
-    @abstractmethod
-    async def get_inventory_alerts(self, tenant_id: UUID) -> list[InventoryAlert]:
-        ...

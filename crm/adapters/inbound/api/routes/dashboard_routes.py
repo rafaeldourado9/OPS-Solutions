@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, Query
 
 from adapters.inbound.api.dependencies import (
     get_conversation_metrics_uc,
-    get_inventory_alerts_uc,
     get_kpis_uc,
     get_revenue_chart_uc,
     get_sales_funnel_uc,
@@ -10,7 +9,6 @@ from adapters.inbound.api.dependencies import (
 from adapters.inbound.api.middleware.auth import CurrentUser, get_current_user
 from core.ports.outbound.dashboard_repository import (
     ConversationMetrics,
-    InventoryAlert,
     KPIData,
     RevenueDataPoint,
     SalesFunnelStage,
@@ -19,7 +17,6 @@ from core.use_cases.dashboard.get_conversation_metrics import (
     GetConversationMetricsRequest,
     GetConversationMetricsUseCase,
 )
-from core.use_cases.dashboard.get_inventory_alerts import GetInventoryAlertsRequest, GetInventoryAlertsUseCase
 from core.use_cases.dashboard.get_kpis import GetKPIsRequest, GetKPIsUseCase
 from core.use_cases.dashboard.get_revenue_chart import GetRevenueChartRequest, GetRevenueChartUseCase
 from core.use_cases.dashboard.get_sales_funnel import GetSalesFunnelRequest, GetSalesFunnelUseCase
@@ -42,7 +39,6 @@ class KPIOut(BaseModel):
     pipeline_value: float
     active_conversations: int
     takeover_active: int
-    low_stock_products: int
 
 
 class SalesFunnelStageOut(BaseModel):
@@ -65,14 +61,6 @@ class ConversationMetricsOut(BaseModel):
     closed_conversations: int
     takeover_sessions_period: int
     avg_messages_per_conversation: float
-
-
-class InventoryAlertOut(BaseModel):
-    product_id: str
-    product_name: str
-    sku: str
-    stock_quantity: float
-    min_stock_alert: float
 
 
 # --- Routes ---
@@ -114,12 +102,3 @@ async def get_conversation_metrics(
 ):
     data = await uc.execute(GetConversationMetricsRequest(tenant_id=current_user.tenant_id, days=days))
     return ConversationMetricsOut(**data.__dict__)
-
-
-@router.get("/inventory-alerts", response_model=list[InventoryAlertOut])
-async def get_inventory_alerts(
-    current_user: CurrentUser = Depends(get_current_user),
-    uc: GetInventoryAlertsUseCase = Depends(get_inventory_alerts_uc),
-):
-    alerts = await uc.execute(GetInventoryAlertsRequest(tenant_id=current_user.tenant_id))
-    return [InventoryAlertOut(**a.__dict__) for a in alerts]

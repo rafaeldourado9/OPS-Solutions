@@ -5,11 +5,11 @@ import {
 } from 'recharts'
 import {
   Users, Lightning, CurrencyDollar, ChatCircle,
-  ArrowsClockwise, Package, Warning
+  ArrowsClockwise
 } from '@phosphor-icons/react'
 import { useAuthStore } from '../../store/authStore'
 import StatsCard from '../../components/ui/StatsCard'
-import { dashboardApi, type KPIs, type SalesFunnelItem, type RevenuePoint, type ConversationMetrics, type InventoryAlert } from '../../api/dashboard'
+import { dashboardApi, type KPIs, type SalesFunnelItem, type RevenuePoint, type ConversationMetrics } from '../../api/dashboard'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function fmt(n: number | undefined | null) {
@@ -59,17 +59,15 @@ export default function DashboardPage() {
       { queryKey: ['dashboard', 'funnel'],  queryFn: dashboardApi.getSalesFunnel },
       { queryKey: ['dashboard', 'revenue'], queryFn: dashboardApi.getRevenueChart },
       { queryKey: ['dashboard', 'conv'],    queryFn: dashboardApi.getConvMetrics },
-      { queryKey: ['dashboard', 'alerts'],  queryFn: dashboardApi.getInventoryAlerts },
     ],
   })
 
-  const [kpisQ, funnelQ, revenueQ, convQ, alertsQ] = results
+  const [kpisQ, funnelQ, revenueQ, convQ] = results
 
   const kpis: KPIs | undefined = kpisQ.data
   const funnel: SalesFunnelItem[] = funnelQ.data ?? []
   const revenue: RevenuePoint[] = revenueQ.data ?? []
   const conv: ConversationMetrics | undefined = convQ.data
-  const alerts: InventoryAlert[] = alertsQ.data ?? []
 
   const loading = kpisQ.isLoading
 
@@ -96,7 +94,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatsCard
           label="Clientes"
           value={loading ? '—' : (kpis?.total_customers ?? 0).toLocaleString('pt-BR')}
@@ -126,12 +124,6 @@ export default function DashboardPage() {
           label="Conversas Ativas"
           value={loading ? '—' : (kpis?.active_conversations ?? 0)}
           icon={<ChatCircle size={18} weight="duotone" />}
-          loading={loading}
-        />
-        <StatsCard
-          label="Estoque Baixo"
-          value={loading ? '—' : (kpis?.low_stock_products ?? 0)}
-          icon={<Package size={18} weight="duotone" />}
           loading={loading}
         />
       </div>
@@ -187,64 +179,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Bottom row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-        {/* Conversation metrics */}
-        <div className="bg-white rounded-2xl border border-zinc-100 p-6">
-          <p className="text-sm font-semibold text-[#1D1D1F] mb-5">Métricas de Conversas</p>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Total de Conversas',  value: (conv?.total_conversations ?? 0).toLocaleString('pt-BR'), icon: <ChatCircle size={16} weight="duotone" /> },
-              { label: 'Takeovers humanos',   value: conv?.takeover_sessions_period ?? 0,                       icon: <Users size={16} weight="duotone" /> },
-              { label: 'Média msgs/conv.',    value: (conv?.avg_messages_per_conversation ?? 0).toFixed(1),     icon: <Lightning size={16} weight="duotone" /> },
-            ].map(({ label, value, icon }) => (
-              <div key={label} className="text-center">
-                <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center text-zinc-400 mx-auto mb-2">
-                  {icon}
-                </div>
-                <p className="text-xl font-bold text-[#1D1D1F] font-mono tracking-tight">{value}</p>
-                <p className="text-[11px] text-zinc-400 mt-0.5 leading-tight">{label}</p>
+      {/* Conversation metrics */}
+      <div className="bg-white rounded-2xl border border-zinc-100 p-6">
+        <p className="text-sm font-semibold text-[#1D1D1F] mb-5">Métricas de Conversas</p>
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: 'Total de Conversas',  value: (conv?.total_conversations ?? 0).toLocaleString('pt-BR'), icon: <ChatCircle size={16} weight="duotone" /> },
+            { label: 'Takeovers humanos',   value: conv?.takeover_sessions_period ?? 0,                       icon: <Users size={16} weight="duotone" /> },
+            { label: 'Média msgs/conv.',    value: (conv?.avg_messages_per_conversation ?? 0).toFixed(1),     icon: <Lightning size={16} weight="duotone" /> },
+          ].map(({ label, value, icon }) => (
+            <div key={label} className="text-center">
+              <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center text-zinc-400 mx-auto mb-2">
+                {icon}
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Inventory alerts */}
-        <div className="bg-white rounded-2xl border border-zinc-100 p-6">
-          <div className="flex items-center justify-between mb-5">
-            <p className="text-sm font-semibold text-[#1D1D1F]">Alertas de Estoque</p>
-            {alerts.length > 0 && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                <Warning size={12} weight="bold" />
-                {alerts.length} item{alerts.length > 1 ? 'ns' : ''}
-              </span>
-            )}
-          </div>
-          {alerts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-zinc-300">
-              <Package size={32} weight="duotone" />
-              <p className="text-xs mt-2">Nenhum alerta de estoque</p>
+              <p className="text-xl font-bold text-[#1D1D1F] font-mono tracking-tight">{value}</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5 leading-tight">{label}</p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {alerts.map(item => (
-                <div key={item.product_id} className="flex items-center gap-3 p-3 bg-amber-50/60 rounded-xl border border-amber-100">
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                    <Package size={15} weight="duotone" className="text-amber-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-[#1D1D1F] truncate">{item.product_name}</p>
-                    <p className="text-[11px] text-zinc-400 font-mono">{item.sku}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-red-600 font-mono">{item.stock_quantity}</p>
-                    <p className="text-[10px] text-zinc-400">mín {item.min_stock_alert}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
       </div>
     </div>

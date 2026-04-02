@@ -19,8 +19,6 @@ export interface TenantProfile {
 }
 
 export interface Integrations {
-  gemini_api_key: string
-  gemini_api_key_set?: boolean
   webhook_url?: string
 }
 

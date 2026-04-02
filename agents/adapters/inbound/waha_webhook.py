@@ -867,6 +867,7 @@ async def waha_webhook(request: Request) -> dict[str, str]:
     if registry is not None:
         from infrastructure.redis_client import get_redis as _get_redis
         _redis = await _get_redis()
+        instance = None
         stored = await _redis.get(f"active_agent:{chat_id}")
         if stored:
             instance = registry.get_by_agent_id(stored)

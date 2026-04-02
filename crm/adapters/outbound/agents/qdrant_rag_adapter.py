@@ -30,8 +30,7 @@ _GEMINI_EMBED_URL = (
 
 
 def _read_gemini_key() -> str:
-    """Read Gemini API key from shared file (written by Settings > Integrations),
-    Never falls back to env — the key must be configured by the tenant."""
+    """Read Gemini API key from shared file or fall back to GEMINI_API_KEY env var."""
     agents_dir = os.environ.get("AGENTS_DIR", "/app/shared-agents")
     key_file = Path(agents_dir) / ".gemini_key"
     try:
@@ -40,7 +39,7 @@ def _read_gemini_key() -> str:
             return key
     except Exception:
         pass
-    return ""
+    return os.environ.get("GEMINI_API_KEY", "")
 
 
 class QdrantRagAdapter(RagDocumentPort):

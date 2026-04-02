@@ -14,7 +14,6 @@ export interface KPIs {
   pipeline_value: number
   active_conversations: number
   takeover_active: number
-  low_stock_products: number
 }
 
 export interface SalesFunnelItem {
@@ -39,14 +38,6 @@ export interface ConversationMetrics {
   closed_conversations: number
   takeover_sessions_period: number
   avg_messages_per_conversation: number
-}
-
-export interface InventoryAlert {
-  product_id: string
-  product_name: string
-  sku: string
-  stock_quantity: number
-  min_stock_alert: number
 }
 
 // ── Mappers ──────────────────────────────────────────────────────────────────
@@ -101,8 +92,4 @@ export const dashboardApi = {
   getConvMetrics: () =>
     api.get<ConversationMetrics>('/api/v1/dashboard/conversation-metrics')
       .then((r: any) => r.data as ConversationMetrics),
-
-  getInventoryAlerts: () =>
-    api.get<InventoryAlert[]>('/api/v1/dashboard/inventory-alerts')
-      .then((r: any) => r.data as InventoryAlert[]),
 }

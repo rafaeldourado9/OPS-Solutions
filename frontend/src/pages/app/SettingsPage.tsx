@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FloppyDisk, CheckCircle, Camera, Buildings, Bell, User, SpinnerGap, Warning, Plugs, Eye, EyeSlash, CreditCard, ArrowSquareOut, Prohibit, UsersThree, UserPlus, Crown, Shield, Headset, WhatsappLogo, Plus, Gear } from '@phosphor-icons/react'
+import { FloppyDisk, CheckCircle, Camera, Buildings, Bell, User, SpinnerGap, Warning, Plugs, CreditCard, ArrowSquareOut, Prohibit, UsersThree, UserPlus, Crown, Shield, Headset, WhatsappLogo, Plus, Gear } from '@phosphor-icons/react'
 import { settingsApi, subscriptionApi, type UserProfile, type TenantProfile, type Integrations, type CompanyProfile, type BankingData, type SubscriptionInfo } from '../../api/settings'
 import { usersApi, type TeamMember } from '../../api/users'
 import { agentsApi, type AgentInstance } from '../../api/agents'
@@ -559,7 +559,6 @@ function NotificacoesTab() {
 function IntegracoesTab() {
   const qc = useQueryClient()
   const [saved, setSaved] = useState(false)
-  const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [form, setForm] = useState<Partial<Integrations>>({})
   const [loaded, setLoaded] = useState(false)
 
@@ -588,7 +587,7 @@ function IntegracoesTab() {
     onError: (err: any) => toast.error(err?.response?.data?.detail ?? 'Erro ao testar webhook'),
   })
 
-  function set(key: keyof Integrations, value: string | number) {
+  function set(key: keyof Integrations, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
@@ -631,41 +630,6 @@ function IntegracoesTab() {
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Gemini API Key */}
-      <div className="bg-white rounded-2xl shadow-[0_1px_12px_rgba(0,0,0,0.06)] border border-zinc-100/60 p-4 md:p-6 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[14px] font-bold text-[#1D1D1F]">Google Gemini</p>
-            <p className="text-[12px] text-zinc-400 mt-0.5">Chave de API para agentes IA. Nunca é exibida após salva.</p>
-          </div>
-          {(data as any)?.gemini_api_key_set && (
-            <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[11px] font-semibold px-2 py-1 rounded-lg shrink-0">
-              <CheckCircle size={11} weight="fill" /> Configurada
-            </span>
-          )}
-        </div>
-        <div>
-          <label className={labelCls}>Gemini API Key {(data as any)?.gemini_api_key_set ? '(nova chave para substituir)' : ''}</label>
-          <div className="relative">
-            <input
-              type={showGeminiKey ? 'text' : 'password'}
-              value={form.gemini_api_key ?? ''}
-              onChange={e => set('gemini_api_key', e.target.value)}
-              placeholder={(data as any)?.gemini_api_key_set ? '••••••••••••• (deixe vazio para manter)' : 'AIza...'}
-              className={`${inputCls} pr-10 font-mono`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowGeminiKey(p => !p)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-            >
-              {showGeminiKey ? <EyeSlash size={14} /> : <Eye size={14} />}
-            </button>
-          </div>
-          <p className="text-[11px] text-zinc-400 mt-1.5">Obtenha sua chave em <span className="text-[#0ABAB5]">aistudio.google.com</span></p>
         </div>
       </div>
 

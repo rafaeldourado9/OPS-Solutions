@@ -6,18 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from adapters.inbound.api.routes.auth_routes import router as auth_router
-from adapters.inbound.api.routes.public_routes import router as public_router
 from adapters.inbound.api.routes.conversation_routes import router as conversation_router
 from adapters.inbound.api.routes.customer_routes import router as customer_router
 from adapters.inbound.api.routes.health_routes import router as health_router
 from adapters.inbound.api.routes.lead_routes import router as lead_router
 from adapters.inbound.api.routes.agent_routes import router as agent_router
-from adapters.inbound.api.routes.contract_routes import router as contract_router
-from adapters.inbound.api.routes.contract_template_routes import router as contract_template_router
-from adapters.inbound.api.routes.premise_routes import router as premise_router
-from adapters.inbound.api.routes.product_routes import router as product_router
-from adapters.inbound.api.routes.quote_routes import router as quote_router
-from adapters.inbound.api.routes.quote_template_routes import router as quote_template_router
 from adapters.inbound.api.routes.dashboard_routes import router as dashboard_router
 from adapters.inbound.api.routes.webhook_routes import router as webhook_router
 from adapters.inbound.api.routes.payment_routes import router as payment_router, _webhook_router as mp_webhook_router
@@ -206,17 +199,10 @@ app.add_middleware(
 app.middleware("http")(_trial_check_middleware)
 
 app.include_router(health_router)
-app.include_router(public_router)
 app.include_router(auth_router)
 app.include_router(customer_router)
 app.include_router(lead_router)
 app.include_router(agent_router)
-app.include_router(contract_router)
-app.include_router(contract_template_router)
-app.include_router(premise_router)
-app.include_router(product_router)
-app.include_router(quote_router)
-app.include_router(quote_template_router)
 app.include_router(conversation_router)
 app.include_router(dashboard_router)
 app.include_router(webhook_router)

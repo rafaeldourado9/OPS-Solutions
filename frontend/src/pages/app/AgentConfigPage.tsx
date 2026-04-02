@@ -167,7 +167,6 @@ function WhatsAppNumberCard({ number }: { number: WhatsAppNumber }) {
 
 function WhatsAppTab() {
   const qc = useQueryClient()
-
   const { data: numbers = [], isLoading } = useQuery({
     queryKey: ['whatsapp-numbers'],
     queryFn: whatsappApi.listNumbers,
@@ -175,9 +174,9 @@ function WhatsAppTab() {
   })
 
   const addNumber = useMutation({
-    mutationFn: () => whatsappApi.addNumber({ label: 'WhatsApp' }),
+    mutationFn: () => whatsappApi.addNumber({}),
     onSuccess: () => {
-      toast.success('Novo número adicionado')
+      toast.success('Número adicionado')
       qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
     },
     onError: () => toast.error('Erro ao adicionar número'),
@@ -200,14 +199,18 @@ function WhatsAppTab() {
             Conecte seu WhatsApp para o agente começar a atender
           </p>
         </div>
-        <button
-          onClick={() => addNumber.mutate()}
-          disabled={addNumber.isPending}
-          className="flex items-center gap-2 bg-[#0ABAB5] hover:bg-[#089B97] text-white text-[12px] font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-60"
-        >
-          {addNumber.isPending ? <SpinnerGap size={14} className="animate-spin" /> : <Plus size={14} weight="bold" />}
-          Adicionar Número
-        </button>
+        {numbers.length === 0 && (
+          <button
+            onClick={() => addNumber.mutate()}
+            disabled={addNumber.isPending}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0ABAB5] text-white text-[13px] font-semibold hover:bg-[#0ABAB5]/90 transition-colors disabled:opacity-50"
+          >
+            {addNumber.isPending
+              ? <SpinnerGap size={14} className="animate-spin" />
+              : <Plus size={14} weight="bold" />}
+            Adicionar Número
+          </button>
+        )}
       </div>
 
       {numbers.length === 0 ? (
@@ -419,7 +422,6 @@ function PersonalidadeTab() {
               <p className="text-[11px] text-zinc-400">
                 Modelo: <span className="font-mono font-semibold text-zinc-600">{config.llm?.provider}/{config.llm?.model}</span>
                 {' '}· Temperatura: <span className="font-semibold text-zinc-600">{config.llm?.temperature}</span>
-                {' '}· A chave Gemini é gerenciada em <strong>Configurações → Integrações</strong>.
               </p>
             </div>
           )}
@@ -434,12 +436,14 @@ function PersonalidadeTab() {
             saved ? 'bg-emerald-500' : 'bg-[#0ABAB5] hover:bg-[#09a8a3]'
           }`}
         >
-          {update.isPending
-            ? <SpinnerGap size={14} className="animate-spin" />
-            : saved
-              ? <CheckCircle size={14} weight="fill" />
-              : <FloppyDisk size={14} weight="bold" />}
-          {update.isPending ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar Alterações'}
+          <span className="inline-flex items-center gap-2">
+            {update.isPending
+              ? <SpinnerGap size={14} className="animate-spin" />
+              : saved
+                ? <CheckCircle size={14} weight="fill" />
+                : <FloppyDisk size={14} weight="bold" />}
+            <span>{update.isPending ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar Alterações'}</span>
+          </span>
         </button>
       </div>
     </div>

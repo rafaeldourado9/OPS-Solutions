@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { SquaresFour, Users, Kanban, ChatCircleDots, FileText } from '@phosphor-icons/react'
+import { SquaresFour, Users, Kanban, ChatCircleDots, Robot } from '@phosphor-icons/react'
 
 const BOTTOM_NAV = [
   { to: '/app/dashboard', icon: SquaresFour, label: 'Início' },
   { to: '/app/customers', icon: Users, label: 'Clientes' },
   { to: '/app/leads', icon: Kanban, label: 'Leads' },
   { to: '/app/conversations', icon: ChatCircleDots, label: 'Conversas' },
-  { to: '/app/quotes', icon: FileText, label: 'Pedidos' },
+  { to: '/app/agents', icon: Robot, label: 'Agente' },
 ]
 
 export default function BottomNav() {

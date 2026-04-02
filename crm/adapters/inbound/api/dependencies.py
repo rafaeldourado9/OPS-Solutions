@@ -4,36 +4,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from adapters.outbound.persistence.repositories.pg_dashboard_repository import PgDashboardRepository
 from core.ports.outbound.dashboard_repository import DashboardRepositoryPort
 from core.use_cases.dashboard.get_conversation_metrics import GetConversationMetricsUseCase
-from core.use_cases.dashboard.get_inventory_alerts import GetInventoryAlertsUseCase
 from core.use_cases.dashboard.get_kpis import GetKPIsUseCase
 from core.use_cases.dashboard.get_revenue_chart import GetRevenueChartUseCase
 from core.use_cases.dashboard.get_sales_funnel import GetSalesFunnelUseCase
 
 from adapters.outbound.persistence.database import get_session
-from adapters.outbound.persistence.repositories.pg_contract_repository import PgContractRepository
 from adapters.outbound.persistence.repositories.pg_conversation_repository import PgConversationRepository
 from adapters.outbound.persistence.repositories.pg_customer_repository import PgCustomerRepository
 from adapters.outbound.persistence.repositories.pg_lead_repository import PgLeadRepository
 from adapters.outbound.persistence.repositories.pg_message_repository import PgMessageRepository
-from adapters.outbound.persistence.repositories.pg_premise_repository import PgPremiseRepository
-from adapters.outbound.persistence.repositories.pg_product_repository import PgProductRepository, PgStockMovementRepository
-from adapters.outbound.persistence.repositories.pg_quote_repository import PgQuoteRepository
-from adapters.outbound.persistence.repositories.pg_quote_template_repository import PgQuoteTemplateRepository
 from adapters.outbound.persistence.repositories.pg_tenant_repository import PgTenantRepository
 from adapters.outbound.persistence.repositories.pg_user_repository import PgUserRepository
 from adapters.outbound.persistence.repositories.pg_whatsapp_number_repository import PgWhatsAppNumberRepository
 from core.ports.outbound.agent_config_port import AgentConfigPort
-from core.ports.outbound.contract_repository import ContractRepositoryPort
 from core.ports.outbound.conversation_repository import ConversationRepositoryPort
 from core.ports.outbound.customer_repository import CustomerRepositoryPort
 from core.ports.outbound.lead_repository import LeadRepositoryPort
 from core.ports.outbound.message_repository import MessageRepositoryPort
 from core.ports.outbound.notification_port import NotificationPort
-from core.ports.outbound.premise_repository import PremiseRepositoryPort
-from core.ports.outbound.product_repository import ProductRepositoryPort
-from core.ports.outbound.stock_movement_repository import StockMovementRepositoryPort
-from core.ports.outbound.quote_repository import QuoteRepositoryPort
-from core.ports.outbound.quote_template_repository import QuoteTemplateRepositoryPort
 from core.ports.outbound.rag_document_port import RagDocumentPort
 from core.ports.outbound.storage_port import StoragePort
 from core.ports.outbound.tenant_repository import TenantRepositoryPort
@@ -63,37 +51,6 @@ from core.use_cases.agents.get_agent_config import GetAgentConfigUseCase
 from core.use_cases.agents.list_rag_documents import ListRagDocumentsUseCase
 from core.use_cases.agents.update_agent_config import UpdateAgentConfigUseCase
 from core.use_cases.agents.upload_rag_document import UploadRagDocumentUseCase
-from core.use_cases.contracts.create_contract import CreateContractUseCase
-from core.use_cases.contracts.list_contracts import ListContractsUseCase
-from core.use_cases.contracts.update_contract_status import UpdateContractStatusUseCase
-from core.use_cases.inventory.add_stock_movement import AddStockMovementUseCase
-from core.use_cases.inventory.create_product import CreateProductUseCase
-from core.use_cases.inventory.list_products import ListProductsUseCase
-from core.use_cases.inventory.list_stock_movements import ListStockMovementsUseCase
-from core.use_cases.inventory.generate_stock_report import GenerateStockReportUseCase
-from core.use_cases.inventory.update_product import UpdateProductUseCase
-from core.use_cases.premises.create_premise import CreatePremiseUseCase
-from core.use_cases.premises.delete_premise import DeletePremiseUseCase
-from core.use_cases.premises.list_premises import ListPremisesUseCase
-from core.use_cases.premises.update_premise import UpdatePremiseUseCase
-from core.use_cases.quotes.create_quote import CreateQuoteUseCase
-from core.use_cases.quotes.delete_quote_template import DeleteQuoteTemplateUseCase
-from core.use_cases.quotes.generate_quote_document import GenerateQuoteDocumentUseCase
-from core.use_cases.quotes.get_quote import GetQuoteUseCase
-from core.use_cases.quotes.list_quote_templates import ListQuoteTemplatesUseCase
-from core.use_cases.quotes.list_quotes import ListQuotesUseCase
-from core.use_cases.quotes.recalculate_quote import RecalculateQuoteUseCase
-from core.use_cases.quotes.update_quote_status import UpdateQuoteStatusUseCase
-from core.use_cases.quotes.analyze_template_fields import AnalyzeTemplateFieldsUseCase
-from core.use_cases.quotes.upload_quote_template import UploadQuoteTemplateUseCase
-from core.use_cases.quotes.generate_quotes_report import GenerateQuotesReportUseCase
-from core.use_cases.quotes.generate_single_quote_pdf import GenerateSingleQuotePdfUseCase
-from core.use_cases.contracts.upload_contract_template import UploadContractTemplateUseCase
-from core.use_cases.contracts.list_contract_templates import ListContractTemplatesUseCase
-from core.use_cases.contracts.delete_contract_template import DeleteContractTemplateUseCase
-from core.use_cases.contracts.generate_contract import GenerateContractUseCase
-from adapters.outbound.persistence.repositories.pg_contract_template_repository import PgContractTemplateRepository
-from core.ports.outbound.contract_template_repository import ContractTemplateRepositoryPort
 
 
 # --- Repositories ---
@@ -297,240 +254,6 @@ async def get_receive_agent_event_uc(
     return ReceiveAgentEventUseCase(sync_uc, store_message_uc, tenant_repo)
 
 
-# --- Premise Use Cases ---
-
-async def get_premise_repo(
-    session: AsyncSession = Depends(get_session),
-) -> PremiseRepositoryPort:
-    return PgPremiseRepository(session)
-
-
-async def get_quote_repo(
-    session: AsyncSession = Depends(get_session),
-) -> QuoteRepositoryPort:
-    return PgQuoteRepository(session)
-
-
-async def get_create_premise_uc(
-    premise_repo: PremiseRepositoryPort = Depends(get_premise_repo),
-) -> CreatePremiseUseCase:
-    return CreatePremiseUseCase(premise_repo)
-
-
-async def get_update_premise_uc(
-    premise_repo: PremiseRepositoryPort = Depends(get_premise_repo),
-) -> UpdatePremiseUseCase:
-    return UpdatePremiseUseCase(premise_repo)
-
-
-async def get_list_premises_uc(
-    premise_repo: PremiseRepositoryPort = Depends(get_premise_repo),
-) -> ListPremisesUseCase:
-    return ListPremisesUseCase(premise_repo)
-
-
-async def get_delete_premise_uc(
-    premise_repo: PremiseRepositoryPort = Depends(get_premise_repo),
-) -> DeletePremiseUseCase:
-    return DeletePremiseUseCase(premise_repo)
-
-
-# --- Quote Use Cases ---
-
-async def get_create_quote_uc(
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-    premise_repo: PremiseRepositoryPort = Depends(get_premise_repo),
-) -> CreateQuoteUseCase:
-    return CreateQuoteUseCase(quote_repo, premise_repo)
-
-
-async def get_get_quote_uc(
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-) -> GetQuoteUseCase:
-    return GetQuoteUseCase(quote_repo)
-
-
-async def get_list_quotes_uc(
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-) -> ListQuotesUseCase:
-    return ListQuotesUseCase(quote_repo)
-
-
-async def get_update_quote_status_uc(
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-) -> UpdateQuoteStatusUseCase:
-    return UpdateQuoteStatusUseCase(quote_repo, _get_broker())
-
-
-async def get_recalculate_quote_uc(
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-    premise_repo: PremiseRepositoryPort = Depends(get_premise_repo),
-) -> RecalculateQuoteUseCase:
-    return RecalculateQuoteUseCase(quote_repo, premise_repo)
-
-
-# --- Quote Template Use Cases ---
-
-async def get_quote_template_repo(
-    session: AsyncSession = Depends(get_session),
-) -> QuoteTemplateRepositoryPort:
-    return PgQuoteTemplateRepository(session)
-
-
-def _get_storage() -> StoragePort:
-    from adapters.outbound.storage.minio_adapter import MinioStorageAdapter
-    return MinioStorageAdapter()
-
-
-def _get_docx_engine():
-    from adapters.outbound.documents.docx_template_engine import DocxTemplateEngine
-    return DocxTemplateEngine()
-
-
-def _get_pdf_exporter():
-    from adapters.outbound.documents.pdf_exporter import LibreOfficePdfExporter
-    return LibreOfficePdfExporter()
-
-
-def _get_llm_analyzer():
-    from adapters.outbound.llm.gemini_analyzer_adapter import GeminiAnalyzerAdapter
-    return GeminiAnalyzerAdapter()
-
-
-async def get_analyze_template_fields_uc() -> AnalyzeTemplateFieldsUseCase:
-    return AnalyzeTemplateFieldsUseCase(_get_docx_engine(), _get_llm_analyzer())
-
-
-async def get_upload_quote_template_uc(
-    template_repo: QuoteTemplateRepositoryPort = Depends(get_quote_template_repo),
-) -> UploadQuoteTemplateUseCase:
-    return UploadQuoteTemplateUseCase(template_repo, _get_storage(), _get_docx_engine())
-
-
-async def get_list_quote_templates_uc(
-    template_repo: QuoteTemplateRepositoryPort = Depends(get_quote_template_repo),
-) -> ListQuoteTemplatesUseCase:
-    return ListQuoteTemplatesUseCase(template_repo)
-
-
-async def get_delete_quote_template_uc(
-    template_repo: QuoteTemplateRepositoryPort = Depends(get_quote_template_repo),
-) -> DeleteQuoteTemplateUseCase:
-    return DeleteQuoteTemplateUseCase(template_repo, _get_storage())
-
-
-async def get_generate_quote_document_uc(
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-    template_repo: QuoteTemplateRepositoryPort = Depends(get_quote_template_repo),
-    customer_repo: CustomerRepositoryPort = Depends(get_customer_repo),
-    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
-) -> GenerateQuoteDocumentUseCase:
-    return GenerateQuoteDocumentUseCase(
-        quote_repo=quote_repo,
-        template_repo=template_repo,
-        storage=_get_storage(),
-        docx_engine=_get_docx_engine(),
-        pdf_exporter=_get_pdf_exporter(),
-        customer_repo=customer_repo,
-        tenant_repo=tenant_repo,
-    )
-
-
-async def get_generate_quotes_report_uc(
-    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-) -> GenerateQuotesReportUseCase:
-    return GenerateQuotesReportUseCase(tenant_repo, quote_repo)
-
-
-async def get_generate_single_quote_pdf_uc(
-    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-) -> GenerateSingleQuotePdfUseCase:
-    return GenerateSingleQuotePdfUseCase(tenant_repo, quote_repo)
-
-
-# --- Contract Use Cases ---
-
-async def get_contract_repo(
-    session: AsyncSession = Depends(get_session),
-) -> ContractRepositoryPort:
-    return PgContractRepository(session)
-
-
-async def get_create_contract_uc(
-    contract_repo: ContractRepositoryPort = Depends(get_contract_repo),
-    quote_repo: QuoteRepositoryPort = Depends(get_quote_repo),
-) -> CreateContractUseCase:
-    return CreateContractUseCase(contract_repo, quote_repo)
-
-
-async def get_list_contracts_uc(
-    contract_repo: ContractRepositoryPort = Depends(get_contract_repo),
-) -> ListContractsUseCase:
-    return ListContractsUseCase(contract_repo)
-
-
-async def get_update_contract_status_uc(
-    contract_repo: ContractRepositoryPort = Depends(get_contract_repo),
-) -> UpdateContractStatusUseCase:
-    return UpdateContractStatusUseCase(contract_repo)
-
-
-# --- Inventory Use Cases ---
-
-async def get_product_repo(
-    session: AsyncSession = Depends(get_session),
-) -> ProductRepositoryPort:
-    return PgProductRepository(session)
-
-
-async def get_stock_movement_repo(
-    session: AsyncSession = Depends(get_session),
-) -> StockMovementRepositoryPort:
-    return PgStockMovementRepository(session)
-
-
-async def get_create_product_uc(
-    product_repo: ProductRepositoryPort = Depends(get_product_repo),
-) -> CreateProductUseCase:
-    return CreateProductUseCase(product_repo)
-
-
-async def get_update_product_uc(
-    product_repo: ProductRepositoryPort = Depends(get_product_repo),
-) -> UpdateProductUseCase:
-    return UpdateProductUseCase(product_repo)
-
-
-async def get_list_products_uc(
-    product_repo: ProductRepositoryPort = Depends(get_product_repo),
-) -> ListProductsUseCase:
-    return ListProductsUseCase(product_repo)
-
-
-async def get_add_stock_movement_uc(
-    product_repo: ProductRepositoryPort = Depends(get_product_repo),
-    movement_repo: StockMovementRepositoryPort = Depends(get_stock_movement_repo),
-) -> AddStockMovementUseCase:
-    return AddStockMovementUseCase(product_repo, movement_repo)
-
-
-async def get_list_stock_movements_uc(
-    product_repo: ProductRepositoryPort = Depends(get_product_repo),
-    movement_repo: StockMovementRepositoryPort = Depends(get_stock_movement_repo),
-) -> ListStockMovementsUseCase:
-    return ListStockMovementsUseCase(product_repo, movement_repo)
-
-
-async def get_generate_stock_report_uc(
-    tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
-    product_repo: ProductRepositoryPort = Depends(get_product_repo),
-    movement_repo: StockMovementRepositoryPort = Depends(get_stock_movement_repo),
-) -> GenerateStockReportUseCase:
-    return GenerateStockReportUseCase(tenant_repo, product_repo, movement_repo)
-
-
 # --- Agent Config + RAG Use Cases ---
 
 def _get_agent_config_port() -> AgentConfigPort:
@@ -603,44 +326,6 @@ async def get_conversation_metrics_uc(
     repo: DashboardRepositoryPort = Depends(get_dashboard_repo),
 ) -> GetConversationMetricsUseCase:
     return GetConversationMetricsUseCase(repo)
-
-
-async def get_inventory_alerts_uc(
-    repo: DashboardRepositoryPort = Depends(get_dashboard_repo),
-) -> GetInventoryAlertsUseCase:
-    return GetInventoryAlertsUseCase(repo)
-
-
-# --- Contract Template Use Cases ---
-
-async def get_contract_template_repo(
-    session: AsyncSession = Depends(get_session),
-) -> ContractTemplateRepositoryPort:
-    return PgContractTemplateRepository(session)
-
-
-async def get_upload_contract_template_uc(
-    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
-) -> UploadContractTemplateUseCase:
-    return UploadContractTemplateUseCase(template_repo, _get_storage())
-
-
-async def get_list_contract_templates_uc(
-    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
-) -> ListContractTemplatesUseCase:
-    return ListContractTemplatesUseCase(template_repo)
-
-
-async def get_delete_contract_template_uc(
-    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
-) -> DeleteContractTemplateUseCase:
-    return DeleteContractTemplateUseCase(template_repo, _get_storage())
-
-
-async def get_generate_contract_uc(
-    template_repo: ContractTemplateRepositoryPort = Depends(get_contract_template_repo),
-) -> GenerateContractUseCase:
-    return GenerateContractUseCase(template_repo, _get_storage(), _get_docx_engine(), _get_pdf_exporter())
 
 
 async def get_whatsapp_number_repo(

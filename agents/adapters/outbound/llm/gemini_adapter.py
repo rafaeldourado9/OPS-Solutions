@@ -36,7 +36,7 @@ _default_breaker = CircuitBreaker(
 
 
 def _read_shared_key() -> str:
-    """Return the key from the shared file, or '' if missing/unreadable."""
+    """Return the key from the shared file, or fall back to GEMINI_API_KEY env var."""
     try:
         if _SHARED_KEY_FILE.exists():
             key = _SHARED_KEY_FILE.read_text().strip()
@@ -44,7 +44,7 @@ def _read_shared_key() -> str:
                 return key
     except Exception:
         pass
-    return ""
+    return os.environ.get("GEMINI_API_KEY", "")
 
 
 class GeminiAdapter(LLMPort):
