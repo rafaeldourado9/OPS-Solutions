@@ -1,0 +1,77 @@
+agent:
+  name: Rafael
+  company: ''
+  language: pt-BR
+  admin_phones: []
+  persona: 'Você é Assistente, assistente virtual da a empresa.
+
+
+    Comportamento:
+
+    - Mensagens curtas e objetivas — prefira várias mensagens curtas a uma mensagem
+    longa
+
+    - Nunca enrole, nunca escreva parágrafos longos
+
+    - Tom natural, como uma pessoa real no WhatsApp
+
+    - Adapte o tom ao do cliente: formal se ele for formal, descontraído se for descontraído
+
+
+    Regras obrigatórias:
+
+    - Pergunte o nome do cliente logo no início e use-o ao longo de toda a conversa
+
+    - Nunca repita perguntas que você já fez — se o cliente não respondeu, continue
+    de onde parou
+
+    - Se o cliente mandar várias mensagens seguidas, agrupe o entendimento e responda
+    uma vez só
+
+    - NUNCA invente informações. Se não sabe, diga "vou confirmar com a equipe"
+
+    - NUNCA se identifique como IA, robô ou assistente virtual. Você é Assistente
+
+    '
+  waha_session: ''
+  role: vendas
+llm:
+  provider: gemini
+  model: gemini-2.0-flash
+  fallback_provider: gemini
+  fallback_model: gemini-2.0-flash-lite
+  temperature: 0.7
+  max_tokens: 8192
+messaging:
+  debounce_seconds: 4.0
+  max_message_chars: 120
+  typing_delay_per_char: 0.04
+  min_pause_between_parts: 1.2
+  max_pause_between_parts: 2.8
+memory:
+  qdrant_collection: ops-solutions_chats
+  qdrant_rag_collection: ops-solutions_rules
+  semantic_k: 6
+  max_recent_messages: 15
+  embedding_model: nomic-embed-text
+anti_hallucination:
+  rag_mandatory: false
+  unknown_answer: Não tenho essa informação agora, mas posso verificar com a equipe
+    e te retorno!
+  grounding_enabled: true
+media:
+  audio_model: gemini-2.0-flash
+  image_model: gemini-2.0-flash
+  video_model: gemini-2.0-flash
+  video_frame_interval: 5
+  tts_enabled: true
+  tts_chance: 0.7
+  tts_voice: Puck
+crm:
+  enabled: true
+  events_webhook: ${CRM_WEBHOOK_URL}
+  push_events:
+  - new_contact
+  - message_received
+  - agent_response_sent
+  - conversation_closed

@@ -245,9 +245,10 @@ async def get_receive_agent_event_uc(
     tenant_repo: TenantRepositoryPort = Depends(get_tenant_repo),
     conversation_repo: ConversationRepositoryPort = Depends(get_conversation_repo),
     message_repo: MessageRepositoryPort = Depends(get_message_repo),
+    lead_repo: LeadRepositoryPort = Depends(get_lead_repo),
     notification: NotificationPort = Depends(get_notification),
 ) -> ReceiveAgentEventUseCase:
-    sync_uc = SyncCustomerFromAgentEventUseCase(customer_repo, tenant_repo)
+    sync_uc = SyncCustomerFromAgentEventUseCase(customer_repo, tenant_repo, lead_repo)
     store_message_uc = StoreAgentEventMessageUseCase(
         conversation_repo, message_repo, customer_repo, tenant_repo, notification,
     )

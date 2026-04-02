@@ -16,6 +16,7 @@ export interface AgentConfig {
     admin_phones: string[]
     waha_url?: string
     waha_session?: string
+    role?: string
   }
   llm: {
     provider: string
@@ -96,7 +97,7 @@ export const agentsApi = {
   listInstances: () =>
     api.get<AgentInstance[]>('/api/v1/agents/instances').then((r: any) => r.data),
 
-  createInstance: (data: { agent_id: string; name?: string; company?: string }) =>
+  createInstance: (data: { agent_id: string; name?: string; company?: string; persona?: string }) =>
     api.post<AgentInstance>('/api/v1/agents/instances', data).then((r: any) => r.data),
 
   deleteInstance: (agent_id: string) =>

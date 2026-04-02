@@ -17,17 +17,9 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
-const PLAN_LABELS: Record<string, Record<string, string>> = {
-  starter: { monthly: 'Starter — R$ 297/mês', annual: 'Starter — R$ 222/mês (anual)' },
-  pro:     { monthly: 'Pro — R$ 497/mês',     annual: 'Pro — R$ 372/mês (anual)' },
-  enterprise: { monthly: 'Enterprise — Sob consulta', annual: 'Enterprise — Sob consulta' },
-}
-
 export default function SignupPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const plan = searchParams.get('plan') ?? 'starter'
-  const isAnnual = searchParams.get('billing') === 'annual'
   const isDemo = searchParams.get('demo') === 'true'
   const setAuth = useAuthStore(s => s.setAuth)
   const [showPass, setShowPass] = useState(false)
@@ -52,7 +44,7 @@ export default function SignupPage() {
       const res = await authApi.register(data)
       setAuth(res.access_token, res.user, res.tenant)
       toast.success(`Conta criada! Bem-vindo, ${res.user.name.split(' ')[0]}!`)
-      navigate('/app/onboarding', { replace: true })
+      navigate('/app/dashboard', { replace: true })
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: unknown } } }
       const raw = axiosErr.response?.data?.detail
@@ -87,10 +79,6 @@ export default function SignupPage() {
               <span className="text-xs font-medium text-amber-400">Demo agendada após o cadastro</span>
             </div>
           )}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-8">
-            <p className="text-xs text-zinc-500 mb-1 uppercase tracking-wider">Plano selecionado</p>
-            <p className="text-lg font-bold text-white">{(PLAN_LABELS[plan] ?? PLAN_LABELS.starter)[isAnnual ? 'annual' : 'monthly']}</p>
-          </div>
           <h1 className="text-4xl font-bold text-white tracking-tight leading-tight mb-4">
             Sua operação começa agora.
           </h1>
@@ -98,7 +86,7 @@ export default function SignupPage() {
             Crie sua conta e tenha acesso imediato ao CRM, agentes de WhatsApp e automações.
           </p>
           <ul className="space-y-3">
-            {['Setup em menos de 5 minutos', 'Sem cartão de crédito no plano Starter', 'Suporte em português incluído', 'Cancele quando quiser'].map(f => (
+            {['Setup em menos de 5 minutos', 'Suporte em português incluído'].map(f => (
               <li key={f} className="flex items-center gap-2.5 text-sm text-zinc-300">
                 <span className="w-5 h-5 rounded-full bg-[#0ABAB5]/20 flex items-center justify-center shrink-0">
                   <Check size={11} weight="bold" className="text-[#0ABAB5]" />

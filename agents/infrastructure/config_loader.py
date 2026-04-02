@@ -28,6 +28,7 @@ class AgentConfig(BaseModel):
     company: str
     language: str = "pt-BR"
     persona: str = ""
+    role: str = "vendas"  # vendas, suporte, faq
     admin_phones: list[str] = Field(
         default_factory=list,
         description="List of phone numbers (digits only, with country code) allowed to use admin commands like /rag",

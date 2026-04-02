@@ -11,9 +11,6 @@ import LeadsPage from './pages/app/LeadsPage'
 import ConversationsPage from './pages/app/ConversationsPage'
 import AgentConfigPage from './pages/app/AgentConfigPage'
 import SettingsPage from './pages/app/SettingsPage'
-import TrialExpiredPage from './pages/app/TrialExpiredPage'
-import OnboardingWizardPage from './pages/app/OnboardingWizardPage'
-
 export const router = createBrowserRouter([
   // Auth
   { path: '/', element: <Navigate to="/auth/login" replace /> },
@@ -21,19 +18,6 @@ export const router = createBrowserRouter([
   { path: '/auth/signup', element: <SignupPage /> },
   { path: '/auth/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/auth/reset-password', element: <ResetPasswordPage /> },
-
-  // Trial expired paywall — outside ProtectedRoute so expired users can reach it
-  { path: '/app/trial-expired', element: <TrialExpiredPage /> },
-
-  // Onboarding wizard — protected but outside AppLayout (full-screen dark design)
-  {
-    path: '/app/onboarding',
-    element: (
-      <ProtectedRoute>
-        <OnboardingWizardPage />
-      </ProtectedRoute>
-    ),
-  },
 
   // Protected CRM app
   {

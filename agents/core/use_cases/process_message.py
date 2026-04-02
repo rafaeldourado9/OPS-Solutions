@@ -18,6 +18,7 @@ import asyncio
 import logging
 import random
 import re
+from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
@@ -355,6 +356,7 @@ class ProcessMessageUseCase:
         debouncer:     Redis-backed debouncer for task interruption checks.
         config:        Agent business configuration.
         build_context: BuildContextUseCase instance.
+        agent_id:      Agent identifier for loading persona files.
     """
 
     def __init__(
@@ -370,6 +372,7 @@ class ProcessMessageUseCase:
         media: Optional[MediaPort] = None,
         calendar: Optional[object] = None,
         web_tools: Optional[object] = None,  # WebToolsAdapter | None
+        agent_id: str = "",
     ) -> None:
         self._primary_llm = primary_llm
         self._fallback_llm = fallback_llm
@@ -382,6 +385,7 @@ class ProcessMessageUseCase:
         self._media = media
         self._calendar = calendar
         self._web_tools = web_tools
+        self._agent_id = agent_id
         self._tts_voice_idx: int = 0  # alternates between tts_voices entries
 
     # ------------------------------------------------------------------
@@ -411,7 +415,27 @@ class ProcessMessageUseCase:
 
         task_id = task_id or str(uuid4())
         await self._debouncer.set_active_task(chat_id, task_id)
+        await self._debouncer.set_processing(chat_id)
 
+        try:
+            await self._execute_inner(
+                agent_id=agent_id,
+                chat_id=chat_id,
+                user_texts=user_texts,
+                task_id=task_id,
+                push_name=push_name,
+            )
+        finally:
+            await self._debouncer.clear_processing(chat_id)
+
+    async def _execute_inner(
+        self,
+        agent_id: str,
+        chat_id: str,
+        user_texts: list[str],
+        task_id: str,
+        push_name: str,
+    ) -> None:
         consolidated = "\n".join(user_texts)
         logger.info(
             "Processing %d message(s) for chat_id=%s task_id=%s",
@@ -678,6 +702,21 @@ class ProcessMessageUseCase:
 
         persona_text = cfg.agent.persona.strip()
         parts = [f"{identity_line}\n\n{persona_text}" if persona_text else identity_line]
+
+        # Load role-specific persona from persona/ folder
+        role = getattr(cfg.agent, 'role', 'vendas')
+        agents_base = Path(__file__).parent.parent / "agents"
+        persona_file = agents_base / self._agent_id / "persona" / f"{role}.txt"
+        if persona_file.exists():
+            try:
+                with persona_file.open("r", encoding="utf-8") as f:
+                    role_persona = f.read().strip()
+                    if role_persona:
+                        parts.append("")
+                        parts.append(f"=== PERSONALIDADE ATIVA: {role.upper()} ===")
+                        parts.append(role_persona)
+            except Exception:
+                logger.exception("Failed to load persona file: %s", persona_file)
 
         if cfg.anti_hallucination.grounding_enabled:
             business_ctx = context.format_business_rules()

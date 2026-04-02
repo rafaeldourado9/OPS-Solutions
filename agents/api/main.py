@@ -375,6 +375,17 @@ async def _on_debounce_expired(key: str) -> None:
     if not raw_messages:
         return
 
+    # If a task is already processing this chat, requeue messages and wait
+    # for the next debounce cycle instead of firing a parallel response.
+    if await instance.debouncer.is_processing(chat_id):
+        await instance.debouncer.requeue_messages(chat_id, raw_messages)
+        logger.info(
+            "Requeued %d message(s) for chat_id=%s — processing in progress",
+            len(raw_messages),
+            chat_id,
+        )
+        return
+
     user_texts: list[str] = []
     push_name: str = ""
     for raw in raw_messages:

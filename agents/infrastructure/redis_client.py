@@ -71,6 +71,7 @@ class MessageDebouncer:
     BUFFER_PREFIX = "buffer"
     DEBOUNCE_PREFIX = "debounce"
     ACTIVE_TASK_PREFIX = "active_task"
+    PROCESSING_PREFIX = "processing"
 
     def __init__(
         self,
@@ -97,10 +98,16 @@ class MessageDebouncer:
         Append a raw message JSON string to the buffer and reset the
         debounce timer.  When the timer expires Redis fires a keyspace
         notification that the worker listens to.
+        
+        If a task is currently processing this chat, mark it as superseded
+        so it stops sending messages.
         """
         buffer_key = self._k(self.BUFFER_PREFIX, chat_id)
         debounce_key = self._k(self.DEBOUNCE_PREFIX, chat_id)
 
+        # If there's an active task, it will be superseded by the new one
+        # (the task checks is_task_active before sending each message part)
+        
         pipe = self._redis.pipeline()
         pipe.rpush(buffer_key, message_json)
         # The debounce key value is irrelevant — only the expiry event matters.
@@ -144,6 +151,41 @@ class MessageDebouncer:
         """Return True if task_id is still the active task for chat_id."""
         current = await self.get_active_task(chat_id)
         return current == task_id
+
+    # ------------------------------------------------------------------
+    # Processing lock — prevents overlapping responses for the same chat
+    # ------------------------------------------------------------------
+
+    async def set_processing(self, chat_id: str, ttl: int = 60) -> None:
+        """Mark this chat as currently being processed by an agent task."""
+        key = self._k(self.PROCESSING_PREFIX, chat_id)
+        await self._redis.setex(key, ttl, "1")
+
+    async def clear_processing(self, chat_id: str) -> None:
+        """Release the processing lock for this chat."""
+        key = self._k(self.PROCESSING_PREFIX, chat_id)
+        await self._redis.delete(key)
+
+    async def is_processing(self, chat_id: str) -> bool:
+        """Return True if an agent task is currently processing this chat."""
+        key = self._k(self.PROCESSING_PREFIX, chat_id)
+        return bool(await self._redis.exists(key))
+
+    async def requeue_messages(self, chat_id: str, raw_messages: list[str]) -> None:
+        """Push messages back to the buffer and reset the debounce timer.
+
+        Used when a new debounce fires while a task is still processing,
+        so the messages are not lost and will be retried after the lock clears.
+        """
+        buffer_key = self._k(self.BUFFER_PREFIX, chat_id)
+        debounce_key = self._k(self.DEBOUNCE_PREFIX, chat_id)
+        ttl_seconds = max(1, int(self._debounce_seconds + 0.5))
+
+        pipe = self._redis.pipeline()
+        for msg in raw_messages:
+            pipe.rpush(buffer_key, msg)
+        pipe.setex(debounce_key, ttl_seconds, "1")
+        await pipe.execute()
 
     @property
     def namespace(self) -> str:

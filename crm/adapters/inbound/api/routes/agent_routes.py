@@ -46,6 +46,7 @@ class CreateInstanceBody(BaseModel):
     agent_id: str
     name: Optional[str] = None
     company: Optional[str] = None
+    persona: Optional[str] = None
 
 
 class RagDocumentOut(BaseModel):
@@ -252,16 +253,14 @@ async def create_instance(
 
     config_port = _get_agent_config_port()
     try:
-        config_port.create_agent(namespaced_id, company_name=auto_company, agent_name=auto_name)
+        config_port.create_agent(
+            namespaced_id,
+            company_name=auto_company,
+            agent_name=auto_name,
+            persona=body.persona or "",
+        )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
-
-    # Always configure the new agent for CRM integration
-    cfg = config_port.read(namespaced_id)
-    cfg.setdefault("crm", {})["enabled"] = True
-    cfg.setdefault("memory", {})["qdrant_collection"] = f"{namespaced_id}_chats"
-    cfg["memory"]["qdrant_rag_collection"] = f"{namespaced_id}_rules"
-    config_port.write(namespaced_id, cfg)
 
     # Register this agent as owned by this tenant
     result = await session.execute(sa_select(TenantModel).where(TenantModel.id == current_user.tenant_id))
@@ -311,10 +310,14 @@ async def create_instance(
 
     asyncio.create_task(_fire_load())
 
+    try:
+        new_cfg = config_port.read(namespaced_id)
+    except Exception:
+        new_cfg = {}
     return {
         "agent_id": namespaced_id,
-        "name": cfg.get("agent", {}).get("name", namespaced_id),
-        "company": cfg.get("agent", {}).get("company", ""),
+        "name": new_cfg.get("agent", {}).get("name", namespaced_id),
+        "company": new_cfg.get("agent", {}).get("company", ""),
         "active": False,
     }
 

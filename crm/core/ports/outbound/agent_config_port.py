@@ -24,7 +24,14 @@ class AgentConfigPort(ABC):
         ...
 
     @abstractmethod
-    def create_agent(self, agent_id: str, template_id: str = "template") -> None:
+    def create_agent(
+        self,
+        agent_id: str,
+        template_id: str = "template",
+        company_name: str = "",
+        agent_name: str = "",
+        persona: str = "",
+    ) -> None:
         """Creates a new agent directory by copying from template."""
         ...
 

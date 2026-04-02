@@ -1,4 +1,4 @@
-"""HTML email templates for platform onboarding and trial lifecycle emails."""
+"""HTML email templates — OPS Solutions Agentes IA."""
 from __future__ import annotations
 
 
@@ -66,7 +66,7 @@ def _base(title: str, body: str, app_url: str, cta_text: str, cta_url: str) -> t
         <td style="background:#F9FAFB;padding:20px 40px;text-align:center;
                    border-top:1px solid #E4E4E7">
           <p style="margin:0;color:#A1A1AA;font-size:12px;line-height:1.6">
-            OPS Solutions &mdash; Plataforma CRM White-Label<br/>
+            OPS Solutions &mdash; Agentes IA para WhatsApp<br/>
             <a href="{app_url}" style="color:#0ABAB5;text-decoration:none">{app_url}</a>
           </p>
         </td>
@@ -82,7 +82,7 @@ def _base(title: str, body: str, app_url: str, cta_text: str, cta_url: str) -> t
 
 def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
     first = name.split()[0]
-    subject = f"Bem-vindo(a) ao OPS Solutions, {first}! Sua operação começa agora 🚀"
+    subject = f"{first}, seu agente IA está pronto no WhatsApp"
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -120,55 +120,58 @@ def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
     </td>
   </tr>
 
-  <!-- GIF hero -->
-  <tr>
-    <td style="border-radius:20px 20px 0 0;overflow:hidden;background:#0A1628;padding:0;line-height:0">
-      <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExb2kxbzFjcHR0aXVpanA3dWlwNHc1NHBieXhtcHR3dGV3bWh6dGV3eSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l4FGni1RBAR2OWsGk/giphy.gif"
-           alt="Bem-vindo!" width="560" style="width:100%;max-width:560px;display:block;border-radius:20px 20px 0 0"/>
-    </td>
-  </tr>
-
   <!-- Main card -->
   <tr>
-    <td style="background:#ffffff;border-radius:0 0 20px 20px;padding:36px 40px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <td style="background:#ffffff;border-radius:20px;padding:36px 40px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
 
-      <!-- Headline -->
-      <h1 style="margin:0 0 6px;color:#1D1D1F;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2">
-        Eaí, {first}! 👋<br/>Seja bem-vindo(a) ao OPS.
-      </h1>
-      <p style="margin:0 0 24px;color:#52525B;font-size:15px;line-height:1.7">
-        A conta <strong style="color:#1D1D1F">{tenant_name}</strong> foi criada com sucesso.
-        Você tem <strong style="color:#0ABAB5">14 dias grátis</strong> pra explorar tudo —
-        sem cartão, sem pegadinha.
-      </p>
-
-      <!-- Trial badge -->
+      <!-- Agent ready badge -->
       <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:28px">
         <tr>
           <td style="background:linear-gradient(135deg,#0ABAB5,#089B97);border-radius:14px;padding:18px 24px">
             <table cellpadding="0" cellspacing="0" width="100%">
               <tr>
                 <td>
-                  <p style="margin:0 0 3px;color:rgba(255,255,255,0.75);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em">Seu trial ativo</p>
-                  <p style="margin:0;color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.3px">14 dias de acesso completo</p>
+                  <p style="margin:0 0 3px;color:rgba(255,255,255,0.75);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em">Status do agente</p>
+                  <p style="margin:0;color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.3px">Ativo e respondendo 24/7</p>
                 </td>
-                <td align="right" style="font-size:32px;line-height:1">🎯</td>
+                <td align="right" style="font-size:32px;line-height:1">🤖</td>
               </tr>
             </table>
           </td>
         </tr>
       </table>
 
+      <!-- Headline -->
+      <h1 style="margin:0 0 6px;color:#1D1D1F;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2">
+        Eaí, {first}! 👋<br/>Tudo pronto na <strong style="color:#0ABAB5">{tenant_name}</strong>.
+      </h1>
+      <p style="margin:0 0 28px;color:#52525B;font-size:15px;line-height:1.7">
+        Seu agente IA já está configurado e conectado ao WhatsApp.
+        Ele atende seus clientes automaticamente — com a personalidade e o conhecimento
+        do seu negócio — enquanto você foca no que importa.
+      </p>
+
       <!-- Features -->
-      <p style="margin:0 0 14px;color:#1D1D1F;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em">O que você pode fazer agora</p>
+      <p style="margin:0 0 14px;color:#1D1D1F;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em">O que seu agente já faz</p>
       <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:28px">
         <tr>
           <td style="padding:10px 0;border-bottom:1px solid #F4F4F5">
             <table cellpadding="0" cellspacing="0"><tr>
-              <td style="font-size:20px;padding-right:14px;vertical-align:middle">🤖</td>
+              <td style="font-size:20px;padding-right:14px;vertical-align:middle">💬</td>
               <td style="vertical-align:middle">
-                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Agente IA no WhatsApp</p>
-                <p style="margin:0;font-size:12px;color:#71717A">Configure e conecte seu número em minutos</p>
+                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Atendimento automático no WhatsApp</p>
+                <p style="margin:0;font-size:12px;color:#71717A">Responde clientes em segundos, o dia todo</p>
+              </td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid #F4F4F5">
+            <table cellpadding="0" cellspacing="0"><tr>
+              <td style="font-size:20px;padding-right:14px;vertical-align:middle">🧠</td>
+              <td style="vertical-align:middle">
+                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Treinado com o conhecimento do seu negócio</p>
+                <p style="margin:0;font-size:12px;color:#71717A">Produtos, preços, dúvidas frequentes — tudo na memória do agente</p>
               </td>
             </tr></table>
           </td>
@@ -178,19 +181,8 @@ def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
             <table cellpadding="0" cellspacing="0"><tr>
               <td style="font-size:20px;padding-right:14px;vertical-align:middle">📋</td>
               <td style="vertical-align:middle">
-                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Pipeline de leads (Kanban)</p>
-                <p style="margin:0;font-size:12px;color:#71717A">Do primeiro contato ao fechamento</p>
-              </td>
-            </tr></table>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:10px 0;border-bottom:1px solid #F4F4F5">
-            <table cellpadding="0" cellspacing="0"><tr>
-              <td style="font-size:20px;padding-right:14px;vertical-align:middle">📄</td>
-              <td style="vertical-align:middle">
-                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Orçamentos em PDF</p>
-                <p style="margin:0;font-size:12px;color:#71717A">Templates DOCX + geração automática</p>
+                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Captura e qualifica leads automaticamente</p>
+                <p style="margin:0;font-size:12px;color:#71717A">Cada conversa vira um contato organizado no CRM</p>
               </td>
             </tr></table>
           </td>
@@ -198,10 +190,10 @@ def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
         <tr>
           <td style="padding:10px 0">
             <table cellpadding="0" cellspacing="0"><tr>
-              <td style="font-size:20px;padding-right:14px;vertical-align:middle">💬</td>
+              <td style="font-size:20px;padding-right:14px;vertical-align:middle">🎯</td>
               <td style="vertical-align:middle">
-                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Takeover humano em tempo real</p>
-                <p style="margin:0;font-size:12px;color:#71717A">Assuma a conversa quando quiser</p>
+                <p style="margin:0;font-size:14px;font-weight:600;color:#1D1D1F">Você assume quando quiser</p>
+                <p style="margin:0;font-size:12px;color:#71717A">Um clique para entrar na conversa e falar direto com o cliente</p>
               </td>
             </tr></table>
           </td>
@@ -209,34 +201,21 @@ def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
       </table>
 
       <!-- CTA -->
-      <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:28px">
+      <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px">
         <tr>
           <td align="center">
             <a href="{app_url}/app/dashboard"
                style="display:inline-block;background:#0ABAB5;color:#ffffff;font-weight:700;
                       font-size:16px;text-decoration:none;padding:16px 40px;border-radius:12px;
                       letter-spacing:-0.2px;box-shadow:0 6px 20px rgba(10,186,181,0.35)">
-              Acessar minha conta →
+              Acessar o painel →
             </a>
           </td>
         </tr>
       </table>
 
-      <!-- Fun GIF 2 -->
-      <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px">
-        <tr>
-          <td align="center" style="border-radius:12px;overflow:hidden;background:#F8FAFC;padding:4px">
-            <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHRjaGp5aGV5Z3pkeWlhNWd6cGlzNnp0NzVkMzBpeW10bGlrNzBrbyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKtnuHOHHUjR38Y/giphy.gif"
-                 alt="Let's go!" width="320" style="max-width:320px;width:100%;border-radius:10px;display:block;margin:0 auto"/>
-          </td>
-        </tr>
-        <tr><td align="center" style="padding-top:8px">
-          <p style="margin:0;font-size:12px;color:#A1A1AA;font-style:italic">você nos próximos 14 dias 👆</p>
-        </td></tr>
-      </table>
-
       <p style="margin:0;color:#A1A1AA;font-size:12px;line-height:1.7;text-align:center">
-        Dúvidas? Só responder este e-mail — somos gente boa 😄<br/>
+        Precisa ajustar algo no agente? Só nos chamar.<br/>
         <a href="{app_url}" style="color:#0ABAB5;text-decoration:none;font-weight:600">solutionsops.com.br</a>
       </p>
     </td>
@@ -246,7 +225,7 @@ def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
   <tr>
     <td align="center" style="padding-top:24px">
       <p style="margin:0;color:#C4C4C7;font-size:11px;line-height:1.6">
-        OPS Solutions · Você está recebendo este e-mail porque criou uma conta.<br/>
+        OPS Solutions &middot; Agentes IA para WhatsApp<br/>
         © 2026 OPS Solutions. Todos os direitos reservados.
       </p>
     </td>
@@ -260,7 +239,8 @@ def welcome(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
     return subject, html
 
 
-def trial_warning(name: str, tenant_name: str, days_remaining: int, app_url: str) -> tuple[str, str]:
+def access_expiring(name: str, tenant_name: str, days_remaining: int, app_url: str) -> tuple[str, str]:
+    """Replaces trial_warning — sent when client access is about to expire."""
     first = name.split()[0]
     urgency_color = "#F59E0B" if days_remaining > 1 else "#EF4444"
     days_label = f"{days_remaining} dia{'s' if days_remaining != 1 else ''}"
@@ -268,61 +248,74 @@ def trial_warning(name: str, tenant_name: str, days_remaining: int, app_url: str
       <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;
                   padding:16px 20px;margin-bottom:24px">
         <p style="margin:0;color:{urgency_color};font-weight:600;font-size:14px">
-          ⏰ Seu trial expira em {days_label}
+          ⏰ Acesso ao agente expira em {days_label}
         </p>
       </div>
       <h2 style="margin:0 0 8px;color:#1D1D1F;font-size:22px;font-weight:700;letter-spacing:-0.4px">
-        Oi, {first}! Não perca o acesso.
+        Oi, {first}! Seu agente está prestes a ser pausado.
       </h2>
       <p style="margin:0 0 16px;color:#52525B;font-size:15px;line-height:1.6">
-        O trial da conta <strong>{tenant_name}</strong> se encerra em <strong>{days_label}</strong>.
-        Para continuar usando o CRM sem interrupção, escolha um plano agora.
+        O acesso do <strong>{tenant_name}</strong> se encerra em <strong>{days_label}</strong>.
+        Para manter o agente ativo respondendo seus clientes sem interrupção,
+        entre em contato com a OPS Solutions para renovar.
       </p>
       <p style="margin:0;color:#71717A;font-size:13px;line-height:1.6">
-        Dúvidas? Basta responder este e-mail — estamos aqui para ajudar.
+        Dúvidas? Basta responder este e-mail — estamos aqui.
       </p>
     """
     subject = (
-        f"Seu trial expira amanhã — garanta seu plano, {first}"
+        f"{first}, seu agente pausa amanhã — renove agora"
         if days_remaining <= 1
-        else f"Faltam {days_label} para o fim do seu trial, {first}"
+        else f"Faltam {days_label} para o agente ser pausado, {first}"
     )
     return _base(
         title=subject,
         body=body,
         app_url=app_url,
-        cta_text="Escolher um plano",
+        cta_text="Falar com a equipe",
         cta_url=f"{app_url}/app/settings",
     )
 
 
-def trial_expired(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
+# Alias para compatibilidade com tasks existentes
+def trial_warning(name: str, tenant_name: str, days_remaining: int, app_url: str) -> tuple[str, str]:
+    return access_expiring(name, tenant_name, days_remaining, app_url)
+
+
+def access_expired(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
+    """Replaces trial_expired — sent when client access has expired."""
     first = name.split()[0]
     body = f"""
       <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;
                   padding:16px 20px;margin-bottom:24px">
         <p style="margin:0;color:#EF4444;font-weight:600;font-size:14px">
-          Trial encerrado
+          Agente pausado
         </p>
       </div>
       <h2 style="margin:0 0 8px;color:#1D1D1F;font-size:22px;font-weight:700;letter-spacing:-0.4px">
-        {first}, seu trial expirou.
+        {first}, seu agente foi pausado.
       </h2>
       <p style="margin:0 0 16px;color:#52525B;font-size:15px;line-height:1.6">
-        O período de trial da conta <strong>{tenant_name}</strong> chegou ao fim.
-        Seus dados estão salvos — ative um plano para recuperar o acesso completo.
+        O acesso de <strong>{tenant_name}</strong> chegou ao fim e o agente parou de responder
+        no WhatsApp. Todos os dados e configurações estão preservados —
+        entre em contato para reativar em minutos.
       </p>
       <p style="margin:0;color:#71717A;font-size:13px;line-height:1.6">
-        Precisa de ajuda para escolher o plano certo? Responda este e-mail.
+        Precisa de ajuda? Responda este e-mail ou nos chame no WhatsApp.
       </p>
     """
     return _base(
-        title=f"Seu trial expirou, {first} — reative sua conta",
+        title=f"{first}, seu agente foi pausado — reative agora",
         body=body,
         app_url=app_url,
-        cta_text="Reativar agora",
+        cta_text="Reativar agente",
         cta_url=f"{app_url}/app/settings",
     )
+
+
+# Alias para compatibilidade com tasks existentes
+def trial_expired(name: str, tenant_name: str, app_url: str) -> tuple[str, str]:
+    return access_expired(name, tenant_name, app_url)
 
 
 def quote_accepted(
@@ -339,17 +332,16 @@ def quote_accepted(
     total_fmt = f"R$ {total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     body = f"""
       <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;
-                  padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px">
-        <span style="font-size:24px">🎉</span>
+                  padding:16px 20px;margin-bottom:24px">
         <p style="margin:0;color:#15803D;font-weight:700;font-size:15px">
-          Orçamento aprovado!
+          🎉 Orçamento aprovado!
         </p>
       </div>
       <h2 style="margin:0 0 8px;color:#1D1D1F;font-size:22px;font-weight:700;letter-spacing:-0.4px">
-        {first}, você fechou mais um negócio.
+        {first}, mais um negócio fechado.
       </h2>
       <p style="margin:0 0 20px;color:#52525B;font-size:15px;line-height:1.6">
-        O orçamento abaixo foi marcado como <strong>aprovado</strong> na conta
+        O orçamento abaixo foi aprovado na conta
         <strong>{tenant_name}</strong>.
       </p>
 

@@ -2,184 +2,66 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Robot, FloppyDisk, CloudArrowUp, FileText, Trash, CheckCircle,
-  QrCode, ArrowClockwise, SignOut, SpinnerGap, Warning,
-  WifiHigh, WifiX, WifiSlash, Plus, Lightning, Star, Chats,
+  SpinnerGap, Warning, WifiHigh, WifiX, QrCode, ArrowClockwise,
 } from '@phosphor-icons/react'
 import toast from 'react-hot-toast'
-import { agentsApi, type RagDocument, type AgentInstance } from '../../api/agents'
+import { agentsApi, type RagDocument } from '../../api/agents'
 import { whatsappApi, type WhatsAppNumber } from '../../api/whatsapp'
 
-type Tab = 'whatsapp' | 'instancias' | 'personalidade' | 'rag'
+type Tab = 'status' | 'personalidade' | 'rag'
 
 const inputCls = 'w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-[13px] text-[#1D1D1F] focus:outline-none focus:border-[#0ABAB5]/50 focus:ring-2 focus:ring-[#0ABAB5]/10 transition-all'
 const labelCls = 'block text-[12px] font-semibold text-zinc-500 mb-1.5'
 
-// ─── WhatsApp Number Card ────────────────────────────────────────────────────────
-function WhatsAppNumberCard({ number }: { number: WhatsAppNumber }) {
+// ─── Status Tab ───────────────────────────────────────────────────────────────
+
+function StatusTab() {
   const qc = useQueryClient()
 
-  const isConnected = number.status === 'connected'
-  const isConnecting = number.status === 'connecting' || number.status === 'qr'
-
-  const { data: qrData, isLoading: loadingQr } = useQuery({
-    queryKey: ['whatsapp-qr', number.id],
-    queryFn: () => whatsappApi.getQr(number.id),
-    refetchInterval: (!isConnected && number.status !== 'error') ? 8000 : false,
-    enabled: (!isConnected && number.status !== 'error'),
-  })
-
-  const restart = useMutation({
-    mutationFn: () => whatsappApi.restart(number.id),
-    onSuccess: () => {
-      toast.success('Gateway reiniciado')
-      qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
-    },
-    onError: () => toast.error('Erro ao reiniciar'),
-  })
-
-  const logout = useMutation({
-    mutationFn: () => whatsappApi.logout(number.id),
-    onSuccess: () => {
-      toast.success('Sessão encerrada')
-      qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
-    },
-    onError: () => toast.error('Erro ao desconectar'),
-  })
-
-  const remove = useMutation({
-    mutationFn: () => whatsappApi.removeNumber(number.id),
-    onSuccess: () => {
-      toast.success('Número removido')
-      qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
-    },
-    onError: () => toast.error('Erro ao remover número'),
-  })
-
-  const update = useMutation({
-    mutationFn: (updates: { label?: string }) => whatsappApi.updateNumber(number.id, updates),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
-  })
-
-  const statusColor = isConnected ? 'emerald' : isConnecting ? 'amber' : 'red'
-  const statusLabel = isConnected
-    ? `Conectado${number.phone_number ? ` · ${number.phone_number}` : ''}`
-    : isConnecting ? 'Aguardando leitura do QR Code...' : 'Desconectado'
-
-  return (
-    <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden shadow-[0_1px_12px_rgba(0,0,0,0.06)]">
-      {/* Header */}
-      <div className="p-4 flex items-center gap-3">
-        {/* Status dot */}
-        <div className={`relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-${statusColor}-50`}>
-          {isConnected ? (
-            <WifiHigh size={18} weight="fill" className="text-emerald-500" />
-          ) : isConnecting ? (
-            <WifiSlash size={18} weight="fill" className="text-amber-500" />
-          ) : (
-            <WifiX size={18} weight="fill" className="text-red-400" />
-          )}
-          {isConnected && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            </span>
-          )}
-        </div>
-
-        {/* Label + status */}
-        <div className="flex-1 min-w-0">
-          <input
-            className="text-[14px] font-semibold text-[#1D1D1F] bg-transparent border-none outline-none focus:ring-2 focus:ring-[#0ABAB5]/30 px-1 -ml-1 rounded w-full truncate"
-            defaultValue={number.label || 'WhatsApp'}
-            onBlur={(e) => {
-              if (e.target.value !== number.label) update.mutate({ label: e.target.value })
-            }}
-          />
-          <p className={`text-[11px] mt-0.5 truncate text-${statusColor}-600`}>{statusLabel}</p>
-        </div>
-
-        {/* Session badge */}
-        <span className="hidden sm:inline text-[10px] font-mono text-zinc-300 truncate max-w-[120px]">
-          {number.session_name}
-        </span>
-      </div>
-
-      {/* QR Code Section */}
-      {!isConnected && (
-        <div className="mx-4 mb-4 bg-zinc-50 rounded-xl border border-zinc-100 flex flex-col items-center gap-3 p-4">
-          <div className="flex items-center gap-1.5 text-zinc-400 self-start">
-            <QrCode size={14} weight="duotone" />
-            <p className="text-[11px] font-medium">Abra o WhatsApp e escaneie o QR Code</p>
-          </div>
-
-          {loadingQr ? (
-            <div className="flex flex-col items-center gap-2 py-8">
-              <SpinnerGap size={22} className="animate-spin text-[#0ABAB5]" />
-              <p className="text-[11px] text-zinc-400">Gerando QR Code...</p>
-            </div>
-          ) : qrData?.qr ? (
-            <div className="p-2 bg-white border border-zinc-200 rounded-xl shadow-sm">
-              <img src={qrData.qr} alt="QR Code WhatsApp" className="w-44 h-44" />
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 py-8">
-              <Warning size={28} weight="duotone" className="text-amber-400" />
-              <p className="text-[11px] text-zinc-500 text-center">
-                QR Code indisponível. Tente reiniciar.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="px-4 pb-3 flex items-center gap-2">
-        <button
-          onClick={() => restart.mutate()}
-          disabled={restart.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] font-medium text-zinc-500 hover:bg-zinc-50 hover:border-zinc-300 transition-all disabled:opacity-50"
-        >
-          {restart.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <ArrowClockwise size={13} />}
-          Reiniciar
-        </button>
-        {isConnected && (
-          <button
-            onClick={() => logout.mutate()}
-            disabled={logout.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] font-medium text-zinc-500 hover:border-red-200 hover:text-red-500 hover:bg-red-50/50 transition-all disabled:opacity-50"
-          >
-            {logout.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <SignOut size={13} />}
-            Desconectar
-          </button>
-        )}
-        <button
-          onClick={() => remove.mutate()}
-          disabled={remove.isPending}
-          className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-zinc-300 hover:text-red-400 hover:bg-red-50/60 transition-all disabled:opacity-50"
-          title="Remover número"
-        >
-          {remove.isPending ? <SpinnerGap size={13} className="animate-spin" /> : <Trash size={13} />}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function WhatsAppTab() {
-  const qc = useQueryClient()
-  const { data: numbers = [], isLoading } = useQuery({
+  const { data: numbers = [], isLoading } = useQuery<WhatsAppNumber[]>({
     queryKey: ['whatsapp-numbers'],
     queryFn: whatsappApi.listNumbers,
     refetchInterval: 5000,
   })
 
-  const addNumber = useMutation({
-    mutationFn: () => whatsappApi.addNumber({}),
+  const number = numbers[0] as WhatsAppNumber | undefined
+
+  // Global status/QR as fallback when no number is registered yet
+  const { data: globalStatus } = useQuery({
+    queryKey: ['whatsapp-global-status'],
+    queryFn: agentsApi.getWhatsAppStatus,
+    refetchInterval: 5000,
+    enabled: !number,
+  })
+  const { data: globalQr, isLoading: loadingGlobalQr } = useQuery({
+    queryKey: ['whatsapp-global-qr'],
+    queryFn: agentsApi.getWhatsAppQr,
+    refetchInterval: 8000,
+    enabled: !number,
+  })
+
+  const isConnected = number ? number.status === 'connected' : globalStatus?.status === 'connected'
+  const isConnecting = number
+    ? (number.status === 'connecting' || number.status === 'qr')
+    : (globalStatus?.status === 'connecting' || globalStatus?.status === 'qr')
+
+  const { data: qrData, isLoading: loadingQr } = useQuery({
+    queryKey: ['whatsapp-qr', number?.id],
+    queryFn: () => whatsappApi.getQr(number!.id),
+    refetchInterval: 8000,
+    enabled: !!number && !isConnected,
+  })
+
+  const restart = useMutation({
+    mutationFn: () => number ? whatsappApi.restart(number.id) : agentsApi.restartWhatsApp(),
     onSuccess: () => {
-      toast.success('Número adicionado')
+      toast.success('Gateway reiniciado')
       qc.invalidateQueries({ queryKey: ['whatsapp-numbers'] })
+      qc.invalidateQueries({ queryKey: ['whatsapp-qr'] })
+      qc.invalidateQueries({ queryKey: ['whatsapp-global-status'] })
+      qc.invalidateQueries({ queryKey: ['whatsapp-global-qr'] })
     },
-    onError: () => toast.error('Erro ao adicionar número'),
+    onError: () => toast.error('Erro ao reiniciar'),
   })
 
   if (isLoading) {
@@ -191,43 +73,79 @@ function WhatsAppTab() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[14px] font-bold text-[#1D1D1F]">Números Conectados</h2>
-          <p className="text-[12px] text-zinc-400 mt-0.5">
-            Conecte seu WhatsApp para o agente começar a atender
-          </p>
+    <div className="space-y-4">
+      {/* Status card */}
+      <div className="bg-white rounded-2xl shadow-[0_1px_12px_rgba(0,0,0,0.06)] border border-zinc-100/60 p-5">
+        <div className="flex items-center gap-4">
+          <div className={`relative w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+            isConnected ? 'bg-emerald-50' : 'bg-zinc-50'
+          }`}>
+            {isConnected ? (
+              <WifiHigh size={22} weight="fill" className="text-emerald-500" />
+            ) : (
+              <WifiX size={22} weight="fill" className="text-zinc-400" />
+            )}
+            {isConnected && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+              </span>
+            )}
+          </div>
+          <div className="flex-1">
+            <p className="text-[15px] font-bold text-[#1D1D1F]">Agente Alexandre</p>
+            <p className={`text-[13px] mt-0.5 font-medium ${
+              isConnected ? 'text-emerald-600' : isConnecting ? 'text-amber-500' : 'text-zinc-400'
+            }`}>
+              {isConnected
+                ? `Conectado${number?.phone_number ? ` · ${number.phone_number}` : ''}`
+                : isConnecting
+                  ? 'Aguardando leitura do QR Code...'
+                  : 'Offline — escaneie o QR Code para conectar'}
+            </p>
+          </div>
+          {number && (
+            <button
+              onClick={() => restart.mutate()}
+              disabled={restart.isPending}
+              title="Reiniciar gateway"
+              className="p-2 rounded-xl border border-zinc-200 text-zinc-400 hover:bg-zinc-50 hover:text-zinc-600 transition-all disabled:opacity-50"
+            >
+              {restart.isPending
+                ? <SpinnerGap size={15} className="animate-spin" />
+                : <ArrowClockwise size={15} />}
+            </button>
+          )}
         </div>
-        {numbers.length === 0 && (
-          <button
-            onClick={() => addNumber.mutate()}
-            disabled={addNumber.isPending}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0ABAB5] text-white text-[13px] font-semibold hover:bg-[#0ABAB5]/90 transition-colors disabled:opacity-50"
-          >
-            {addNumber.isPending
-              ? <SpinnerGap size={14} className="animate-spin" />
-              : <Plus size={14} weight="bold" />}
-            Adicionar Número
-          </button>
-        )}
       </div>
 
-      {numbers.length === 0 ? (
-        <div className="flex flex-col items-center py-16 bg-white rounded-2xl border border-zinc-100 shadow-[0_1px_12px_rgba(0,0,0,0.06)]">
-          <div className="w-14 h-14 rounded-2xl bg-zinc-50 flex items-center justify-center mb-3">
-            <Chats size={28} weight="duotone" className="text-zinc-300" />
+      {/* QR Code — shown when offline */}
+      {!isConnected && (
+        <div className="bg-white rounded-2xl shadow-[0_1px_12px_rgba(0,0,0,0.06)] border border-zinc-100/60 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <QrCode size={16} weight="duotone" className="text-[#0ABAB5]" />
+            <p className="text-[13px] font-semibold text-[#1D1D1F]">Conectar WhatsApp</p>
           </div>
-          <p className="text-[14px] font-semibold text-zinc-500">Nenhum número conectado</p>
-          <p className="text-[12px] text-zinc-400 text-center max-w-xs mt-1.5">
-            Clique em "Adicionar Número" e escaneie o QR Code para começar.
+          <p className="text-[12px] text-zinc-400 mb-5">
+            Abra o WhatsApp no celular → <strong>Dispositivos conectados</strong> → <strong>Conectar dispositivo</strong> → escaneie o código abaixo.
           </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {numbers.map((n: WhatsAppNumber) => (
-            <WhatsAppNumberCard key={n.id} number={n} />
-          ))}
+          <div className="flex justify-center">
+            {(number ? loadingQr : loadingGlobalQr) ? (
+              <div className="flex flex-col items-center gap-3 py-10">
+                <SpinnerGap size={28} className="animate-spin text-[#0ABAB5]" />
+                <p className="text-[12px] text-zinc-400">Gerando QR Code...</p>
+              </div>
+            ) : (number ? qrData?.qr : globalQr?.qr) ? (
+              <div className="p-3 bg-white border-2 border-zinc-100 rounded-2xl shadow-sm inline-block">
+                <img src={(number ? qrData?.qr : globalQr?.qr) || ''} alt="QR Code WhatsApp" className="w-52 h-52 block" />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-10 text-zinc-400">
+                <Warning size={32} weight="duotone" className="text-amber-400" />
+                <p className="text-[12px] text-center">QR Code indisponível.<br/>Clique em reiniciar e aguarde.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -237,10 +155,27 @@ function WhatsAppTab() {
 
 // ─── Personalidade Tab ────────────────────────────────────────────────────────
 
+const AGENT_ROLES = [
+  {
+    key: 'vendas',
+    label: 'Vendas',
+    description: 'Foco em qualificar leads e conduzir até o fechamento',
+  },
+  {
+    key: 'suporte',
+    label: 'Suporte',
+    description: 'Resolve problemas técnicos e escala quando necessário',
+  },
+  {
+    key: 'faq',
+    label: 'FAQ',
+    description: 'Responde dúvidas com base nos documentos cadastrados',
+  },
+]
+
 function PersonalidadeTab() {
   const qc = useQueryClient()
   const [saved, setSaved] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['agent-config'],
@@ -257,19 +192,17 @@ function PersonalidadeTab() {
     onError: () => toast.error('Erro ao salvar configuração'),
   })
 
-  const nameRef    = useRef<HTMLInputElement>(null)
-  const companyRef = useRef<HTMLInputElement>(null)
-  const personaRef = useRef<HTMLTextAreaElement>(null)
-  const langRef    = useRef<HTMLSelectElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
   const ttsVoiceRef = useRef<HTMLSelectElement>(null)
   const [ttsEnabled, setTtsEnabled] = useState(false)
   const [ttsChance, setTtsChance] = useState(0.75)
+  const [role, setRole] = useState('vendas')
 
-  // Sync TTS state when config loads
   useEffect(() => {
     if (config) {
       setTtsEnabled(!!config.media?.tts_enabled)
       setTtsChance(config.media?.tts_chance ?? 0.75)
+      setRole(config.agent?.role ?? 'vendas')
     }
   }, [config])
 
@@ -277,9 +210,7 @@ function PersonalidadeTab() {
     update.mutate({
       agent: {
         name: nameRef.current?.value,
-        company: companyRef.current?.value,
-        language: langRef.current?.value,
-        persona: personaRef.current?.value,
+        role,
       },
       media: {
         tts_enabled: ttsEnabled,
@@ -301,7 +232,7 @@ function PersonalidadeTab() {
     return (
       <div className="flex flex-col items-center gap-2 py-16 text-zinc-400">
         <Warning size={28} weight="duotone" />
-        <p className="text-[13px]">Configuração não encontrada. Verifique se o agente está configurado.</p>
+        <p className="text-[13px]">Configuração não encontrada.</p>
       </div>
     )
   }
@@ -310,62 +241,50 @@ function PersonalidadeTab() {
     <div className="space-y-4">
       <div className="bg-white rounded-2xl shadow-[0_1px_12px_rgba(0,0,0,0.06)] border border-zinc-100/60 p-4 md:p-6 space-y-5">
 
-        {/* Nome + Empresa + Idioma */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Nome do Assistente</label>
-            <input
-              ref={nameRef}
-              type="text"
-              defaultValue={config.agent?.name ?? ''}
-              placeholder="Sofia, Carlos, Ana..."
-              className={inputCls}
-            />
-            <p className="text-[11px] text-zinc-400 mt-1">Como seus clientes vão chamá-lo</p>
-          </div>
-          <div>
-            <label className={labelCls}>Nome da Empresa</label>
-            <input
-              ref={companyRef}
-              type="text"
-              defaultValue={config.agent?.company ?? ''}
-              placeholder="Sua Empresa Ltda"
-              className={inputCls}
-            />
-            <p className="text-[11px] text-zinc-400 mt-1">O agente usará este nome ao se apresentar</p>
-          </div>
-        </div>
-
-        <div>
-          <label className={labelCls}>Idioma Principal</label>
-          <select ref={langRef} className={`${inputCls} max-w-xs`} defaultValue={config.agent?.language ?? 'pt-BR'}>
-            <option value="pt-BR">Português (Brasil)</option>
-            <option value="en">English</option>
-            <option value="es">Español</option>
-          </select>
-        </div>
-
-        {/* Personalidade — principal campo */}
-        <div>
-          <label className={labelCls}>Personalidade e Instruções</label>
-          <textarea
-            ref={personaRef}
-            rows={8}
-            defaultValue={config.agent?.persona ?? ''}
-            placeholder={`Descreva como o assistente deve se comportar.\n\nExemplos:\n— Tom consultivo, especialista em energia solar, faz perguntas para entender o consumo do cliente\n— Simpático, usa linguagem informal, responde rápido e diretamente\n— Sempre apresenta preços e condições antes de dar qualquer desconto`}
-            className={`${inputCls} resize-none leading-relaxed`}
+        {/* Nome do agente */}
+        <div className="max-w-xs">
+          <label className={labelCls}>Nome do Agente</label>
+          <input
+            ref={nameRef}
+            type="text"
+            defaultValue={config.agent?.name ?? ''}
+            placeholder="Alexandre, Sofia..."
+            className={inputCls}
           />
-          <p className="text-[11px] text-zinc-400 mt-1">
-            Este texto define toda a personalidade, tom e comportamento do assistente. Seja específico.
-          </p>
+          <p className="text-[11px] text-zinc-400 mt-1">Como o agente se apresenta aos clientes</p>
         </div>
 
-        {/* Áudio / TTS — seção opcional */}
+        {/* Função */}
+        <div>
+          <label className={labelCls}>Personalidade do Agente</label>
+          <p className="text-[11px] text-zinc-400 mb-3">Alexandre adapta seu comportamento conforme a personalidade selecionada</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+            {AGENT_ROLES.map(r => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setRole(r.key)}
+                className={`text-left p-4 rounded-2xl border-2 transition-all ${
+                  role === r.key
+                    ? 'border-[#0ABAB5] bg-[#0ABAB5]/5'
+                    : 'border-zinc-100 hover:border-zinc-200 bg-white'
+                }`}
+              >
+                <p className={`text-[13px] font-bold mb-1 ${role === r.key ? 'text-[#0ABAB5]' : 'text-[#1D1D1F]'}`}>
+                  {r.label}
+                </p>
+                <p className="text-[11px] text-zinc-400 leading-snug">{r.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* TTS */}
         <div className="pt-2 border-t border-zinc-100">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[13px] font-semibold text-[#1D1D1F]">Respostas por áudio</p>
-              <p className="text-[11px] text-zinc-400 mt-0.5">O assistente responde em áudio (voz sintética)</p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">O agente responde em voz sintética</p>
             </div>
             <button
               type="button"
@@ -406,26 +325,6 @@ function PersonalidadeTab() {
             </div>
           )}
         </div>
-
-        {/* Configurações avançadas — colapsível */}
-        <div className="pt-2 border-t border-zinc-100">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(v => !v)}
-            className="flex items-center gap-2 text-[12px] font-semibold text-zinc-400 hover:text-zinc-600 transition-colors"
-          >
-            <span className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
-            Configurações avançadas
-          </button>
-          {showAdvanced && (
-            <div className="mt-4 space-y-4 pl-4 border-l-2 border-zinc-100">
-              <p className="text-[11px] text-zinc-400">
-                Modelo: <span className="font-mono font-semibold text-zinc-600">{config.llm?.provider}/{config.llm?.model}</span>
-                {' '}· Temperatura: <span className="font-semibold text-zinc-600">{config.llm?.temperature}</span>
-              </p>
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="flex justify-end">
@@ -436,14 +335,8 @@ function PersonalidadeTab() {
             saved ? 'bg-emerald-500' : 'bg-[#0ABAB5] hover:bg-[#09a8a3]'
           }`}
         >
-          <span className="inline-flex items-center gap-2">
-            {update.isPending
-              ? <SpinnerGap size={14} className="animate-spin" />
-              : saved
-                ? <CheckCircle size={14} weight="fill" />
-                : <FloppyDisk size={14} weight="bold" />}
-            <span>{update.isPending ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar Alterações'}</span>
-          </span>
+          {update.isPending ? <SpinnerGap size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} weight="fill" /> : <FloppyDisk size={14} weight="bold" />}
+          {update.isPending ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
         </button>
       </div>
     </div>
@@ -457,14 +350,14 @@ function RagTab() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
-  const { data: instances = [] } = useQuery<AgentInstance[]>({
+  const { data: instances = [] } = useQuery({
     queryKey: ['agent-instances'],
     queryFn: agentsApi.listInstances,
   })
-  const activeAgentId = instances.find(i => i.active)?.agent_id ?? ''
+  const activeAgentId: string = (instances as any[]).find((i: any) => i.active)?.agent_id ?? ''
 
   const { data: docs = [], isLoading } = useQuery<RagDocument[]>({
-    queryKey: ['rag-docs'],
+    queryKey: ['rag-docs', activeAgentId],
     queryFn: () => agentsApi.listDocs(activeAgentId || undefined),
     enabled: true,
   })
@@ -585,205 +478,10 @@ function RagTab() {
   )
 }
 
-// ─── Instâncias Tab ───────────────────────────────────────────────────────────
-
-function InstanciasTab() {
-  const qc = useQueryClient()
-  const [showCreate, setShowCreate] = useState(false)
-  const [newId, setNewId]     = useState('')
-  const [newName, setNewName] = useState('')
-
-  const { data: instances = [], isLoading } = useQuery<AgentInstance[]>({
-    queryKey: ['agent-instances'],
-    queryFn: agentsApi.listInstances,
-  })
-
-  const create = useMutation({
-    mutationFn: () => agentsApi.createInstance({ agent_id: newId, name: newName || undefined }),
-    onSuccess: () => {
-      toast.success('Instância criada')
-      qc.invalidateQueries({ queryKey: ['agent-instances'] })
-      setShowCreate(false)
-      setNewId('')
-      setNewName('')
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.detail ?? 'Erro ao criar instância'
-      toast.error(typeof msg === 'string' ? msg : 'Erro ao criar instância')
-    },
-  })
-
-  const activate = useMutation({
-    mutationFn: (agent_id: string) => agentsApi.activateInstance(agent_id),
-    onSuccess: () => {
-      toast.success('Instância ativada')
-      qc.invalidateQueries({ queryKey: ['agent-instances'] })
-    },
-    onError: () => toast.error('Erro ao ativar instância'),
-  })
-
-  const remove = useMutation({
-    mutationFn: (agent_id: string) => agentsApi.deleteInstance(agent_id),
-    onSuccess: () => {
-      toast.success('Instância removida')
-      qc.invalidateQueries({ queryKey: ['agent-instances'] })
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.detail ?? 'Erro ao remover instância'
-      toast.error(typeof msg === 'string' ? msg : 'Erro ao remover')
-    },
-  })
-
-  const handleIdInput = (v: string) => {
-    setNewId(v.toLowerCase().replace(/[^a-z0-9_-]/g, ''))
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[13px] font-bold text-[#1D1D1F]">Instâncias de agente</p>
-          <p className="text-[12px] text-zinc-400 mt-0.5">
-            {instances.length} {instances.length === 1 ? 'instância' : 'instâncias'} — cada uma pode ter seu próprio número de WhatsApp
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(v => !v)}
-          className="flex items-center gap-2 bg-[#0ABAB5] hover:bg-[#089B97] text-white text-[12px] font-semibold px-4 py-2 rounded-xl transition-all active:scale-95"
-        >
-          <Plus size={13} weight="bold" />
-          Nova instância
-        </button>
-      </div>
-
-      {/* Create form */}
-      {showCreate && (
-        <div className="bg-white rounded-2xl border border-zinc-200 p-4 space-y-3 shadow-sm">
-          <p className="text-[12px] font-bold text-zinc-600">Nova instância</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>
-                ID da instância
-                <span className="text-zinc-400 font-normal ml-1">(letras, números, hífens)</span>
-              </label>
-              <input
-                value={newId}
-                onChange={e => handleIdInput(e.target.value)}
-                placeholder="meu-agente"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Nome de exibição <span className="text-zinc-400 font-normal">(opcional)</span></label>
-              <input
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="Assistente Vendas"
-                className={inputCls}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={() => setShowCreate(false)}
-              className="text-[12px] font-semibold px-4 py-2 rounded-xl border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={() => create.mutate()}
-              disabled={create.isPending || !newId}
-              className="flex items-center gap-2 text-[12px] font-semibold px-4 py-2 rounded-xl bg-[#0ABAB5] text-white hover:bg-[#089B97] transition-all disabled:opacity-60"
-            >
-              {create.isPending ? <SpinnerGap size={12} className="animate-spin" /> : <Plus size={12} weight="bold" />}
-              {create.isPending ? 'Criando...' : 'Criar'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Instances list */}
-      <div className="bg-white rounded-2xl border border-zinc-100 shadow-[0_1px_12px_rgba(0,0,0,0.06)] overflow-hidden">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-10">
-            <SpinnerGap size={24} className="animate-spin text-[#0ABAB5]" />
-          </div>
-        ) : instances.length === 0 ? (
-          <div className="flex flex-col items-center py-10 text-zinc-300">
-            <Robot size={36} weight="duotone" />
-            <p className="text-sm mt-2 text-zinc-400">Nenhuma instância criada</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-zinc-100">
-            {instances.map(inst => (
-              <div key={inst.agent_id} className="flex items-center gap-3 px-5 py-4 hover:bg-zinc-50/60 transition-colors group">
-                {/* Icon */}
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                  inst.active ? 'bg-[#0ABAB5]/10' : 'bg-zinc-100'
-                }`}>
-                  <Robot size={16} weight="duotone" className={inst.active ? 'text-[#0ABAB5]' : 'text-zinc-400'} />
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[13px] font-semibold text-[#1D1D1F] truncate">
-                      {inst.name || inst.agent_id}
-                    </p>
-                    {inst.active && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-[#0ABAB5] bg-[#0ABAB5]/10 px-2 py-0.5 rounded-full">
-                        <Lightning size={9} weight="fill" />
-                        ATIVA
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-zinc-400 font-mono">{inst.agent_id}</p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {!inst.active && (
-                    <button
-                      onClick={() => activate.mutate(inst.agent_id)}
-                      disabled={activate.isPending}
-                      title="Ativar esta instância"
-                      className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-[#0ABAB5]/10 text-[#0ABAB5] hover:bg-[#0ABAB5]/20 transition-all disabled:opacity-60"
-                    >
-                      {activate.isPending
-                        ? <SpinnerGap size={11} className="animate-spin" />
-                        : <Star size={11} weight="fill" />}
-                      Ativar
-                    </button>
-                  )}
-                  {!inst.active && (
-                    <button
-                      onClick={() => remove.mutate(inst.agent_id)}
-                      disabled={remove.isPending}
-                      title="Excluir instância"
-                      className="p-1.5 rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-500 transition-all disabled:opacity-60"
-                    >
-                      <Trash size={14} weight="bold" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <p className="text-[12px] text-zinc-400 px-1">
-        Cada instância pode ter personalidade, documentos RAG e número de WhatsApp próprios. Ative a instância principal para gerenciar sua configuração na aba Personalidade.
-      </p>
-    </div>
-  )
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AgentConfigPage() {
-  const [tab, setTab] = useState<Tab>('whatsapp')
+  const [tab, setTab] = useState<Tab>('status')
 
   const { data: numbers = [] } = useQuery<WhatsAppNumber[]>({
     queryKey: ['whatsapp-numbers'],
@@ -791,12 +489,10 @@ export default function AgentConfigPage() {
     refetchInterval: 10000,
   })
 
-  // If ANY number is connected, consider the overall system online for the header indicator
   const isConnected = numbers.some(n => n.status === 'connected')
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: 'whatsapp',      label: 'WhatsApp'      },
-    { key: 'instancias',    label: 'Instâncias'    },
+    { key: 'status',        label: 'Status'        },
     { key: 'personalidade', label: 'Personalidade' },
     { key: 'rag',           label: 'Documentos RAG'},
   ]
@@ -833,8 +529,7 @@ export default function AgentConfigPage() {
         ))}
       </div>
 
-      {tab === 'whatsapp'      && <WhatsAppTab />}
-      {tab === 'instancias'    && <InstanciasTab />}
+      {tab === 'status'        && <StatusTab />}
       {tab === 'personalidade' && <PersonalidadeTab />}
       {tab === 'rag'           && <RagTab />}
     </div>

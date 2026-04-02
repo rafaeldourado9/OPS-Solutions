@@ -2,22 +2,26 @@ import structlog
 
 from core.domain.customer import Customer
 from core.domain.events import InboundAgentEvent
+from core.domain.lead import Lead
 from core.ports.outbound.customer_repository import CustomerRepositoryPort
+from core.ports.outbound.lead_repository import LeadRepositoryPort
 from core.ports.outbound.tenant_repository import TenantRepositoryPort
 
 logger = structlog.get_logger()
 
 
 class SyncCustomerFromAgentEventUseCase:
-    """Auto-create a customer when a new_contact event arrives from agents."""
+    """Auto-create a customer (and lead) when a new_contact event arrives from agents."""
 
     def __init__(
         self,
         customer_repo: CustomerRepositoryPort,
         tenant_repo: TenantRepositoryPort,
+        lead_repo: LeadRepositoryPort | None = None,
     ) -> None:
         self._customer_repo = customer_repo
         self._tenant_repo = tenant_repo
+        self._lead_repo = lead_repo
 
     async def execute(self, event: InboundAgentEvent) -> Customer | None:
         if event.event_type != "new_contact":
@@ -25,8 +29,7 @@ class SyncCustomerFromAgentEventUseCase:
 
         tenant = await self._tenant_repo.get_by_agent_id(event.agent_id)
         if not tenant:
-            # Fallback for single-tenant deployments where agent_id may differ from tenant slug
-            tenant = await self._tenant_repo.get_by_gateway_session("default")
+            tenant = await self._tenant_repo.get_by_owned_agent_id(event.agent_id)
         if not tenant:
             logger.warning("tenant_not_found_for_agent", agent_id=event.agent_id)
             return None
@@ -55,4 +58,16 @@ class SyncCustomerFromAgentEventUseCase:
             phone=phone,
             agent_id=event.agent_id,
         )
+
+        # Auto-create a lead for this new contact
+        if self._lead_repo:
+            lead = Lead.create(
+                tenant_id=tenant.id,
+                title=name,
+                customer_id=customer.id,
+                source="whatsapp_auto",
+            )
+            await self._lead_repo.save(lead)
+            logger.info("lead_auto_created", lead_id=str(lead.id), customer_id=str(customer.id))
+
         return customer

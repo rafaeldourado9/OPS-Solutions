@@ -261,6 +261,7 @@ async def build_agent_instance(
         media=media,
         calendar=calendar,
         web_tools=web_tools,
+        agent_id=agent_id,
     )
 
     # Build ingest use case (only when qdrant is available)

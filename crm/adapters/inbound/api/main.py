@@ -83,6 +83,82 @@ async def _trial_check_middleware(request, call_next):
     return await call_next(request)
 
 
+async def ensure_default_agent():
+    """Auto-heal tenant→agent linkage when the linked agent directory doesn't exist.
+
+    Scans the agents filesystem for valid agent directories (those with a
+    business.yml, excluding 'template').  For every active tenant whose
+    agent_id either is null or points to a non-existent directory, updates
+    both agent_id and settings["owned_agents"] to the first found valid agent.
+    This makes the system self-healing after the onboarding flow was removed.
+    """
+    import json
+    from pathlib import Path
+    from sqlalchemy import select
+
+    from adapters.outbound.persistence.database import async_session_factory
+    from adapters.outbound.persistence.models.tenant_model import TenantModel
+    from infrastructure.config import settings
+
+    agents_dir = Path(settings.agents_dir)
+    if not agents_dir.exists():
+        logger.warning("ensure_default_agent_no_dir", path=str(agents_dir))
+        return
+
+    # Discover all valid agent directories
+    available = sorted([
+        d.name for d in agents_dir.iterdir()
+        if d.is_dir()
+        and (d / "business.yml").exists()
+        and d.name not in ("template",)
+        and not d.name.startswith("active-agents")
+    ])
+
+    if not available:
+        logger.warning("ensure_default_agent_none_found", agents_dir=str(agents_dir))
+        return
+
+    logger.info("ensure_default_agent_found", available=available)
+
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(TenantModel).where(TenantModel.is_active == True)
+            )
+            tenants = result.scalars().all()
+
+            for tenant in tenants:
+                current_id = tenant.agent_id or ""
+                if current_id and (agents_dir / current_id / "business.yml").exists():
+                    # Already linked to a real directory — nothing to do
+                    continue
+
+                new_id = available[0]
+                logger.warning(
+                    "ensure_default_agent_healing",
+                    tenant_id=str(tenant.id),
+                    old_agent_id=current_id or None,
+                    new_agent_id=new_id,
+                )
+
+                tenant.agent_id = new_id
+                s = dict(tenant.settings or {})
+                owned: list = list(s.get("owned_agents") or [])
+                if new_id not in owned:
+                    owned.append(new_id)
+                # Remove stale ids that no longer have a directory
+                owned = [a for a in owned if (agents_dir / a / "business.yml").exists()]
+                if new_id not in owned:
+                    owned.append(new_id)
+                s["owned_agents"] = owned
+                tenant.settings = s
+
+            await session.commit()
+            logger.info("ensure_default_agent_done")
+    except Exception as e:
+        logger.error("ensure_default_agent_failed", error=str(e))
+
+
 async def sync_agent_manifest():
     """
     Write active-agents.json to the shared agents volume.
@@ -163,6 +239,9 @@ async def lifespan(app: FastAPI):
         logger.info("migration_trial_ends_at_done")
     except Exception as e:
         logger.error("database_init_failed", error=str(e))
+
+    # Auto-heal tenant→agent linkage if the linked agent directory doesn't exist
+    await ensure_default_agent()
 
     # Sync agent manifest so the agent process knows which agents to load
     await sync_agent_manifest()

@@ -61,17 +61,8 @@ export default function OnboardingWizardPage() {
         agent_id: id,
         name: agentName || tenant?.name || 'Assistente',
         company: companyNameRef.current?.value || tenant?.name || '',
+        persona: persona.trim() || undefined,
       })
-
-      // 3. Set persona on the agent config
-      if (persona.trim()) {
-        await agentsApi.updateConfig({
-          agent: {
-            persona: persona.trim(),
-            company: companyNameRef.current?.value || tenant?.name || '',
-          },
-        }).catch(() => {}) // non-critical
-      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agent-instances'] })

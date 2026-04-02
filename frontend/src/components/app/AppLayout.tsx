@@ -1,22 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
-import { useAuthStore } from '../../store/authStore'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
-  const navigate = useNavigate()
-  const { tenant } = useAuthStore()
-
-  // Redirect new users (no onboarding completed) to wizard
-  useEffect(() => {
-    if (tenant?.id && !localStorage.getItem(`onboarding_${tenant.id}`)) {
-      navigate('/app/onboarding', { replace: true })
-    }
-  }, [tenant?.id])
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

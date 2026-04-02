@@ -51,6 +51,8 @@ class ReceiveAgentEventUseCase:
         tenant_id_str = ""
         try:
             tenant = await self._tenant_repo.get_by_agent_id(event.agent_id)
+            if not tenant:
+                tenant = await self._tenant_repo.get_by_owned_agent_id(event.agent_id)
             if tenant:
                 webhook_url = (tenant.raw_settings or {}).get("integrations", {}).get("webhook_url", "")
                 tenant_id_str = str(tenant.id)
